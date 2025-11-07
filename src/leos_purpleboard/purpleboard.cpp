@@ -18,63 +18,58 @@ struct leos_purpleboard {
 };
 
 leos_purpleboard_result_t leos_purpleboard_init(i2c_inst_t *i2c, uint sda, uint scl, leos_purpleboard_t **out_pb) {
+    leos_purpleboard_result_t result = PB_OK;
     LOG_DEBUG("Initializing Purpleboard stack");
     leos_purpleboard_t *pb = new leos_purpleboard; // assign a new purpleboard struct into a heap location
     pb->i2c_block = i2c;
     pb->sda = sda;
     pb->scl = scl;
     pb->wire = new TwoWire(i2c, sda, scl);
-    pb->tsl = new Adafruit_TSL2561_Unified(TSL2561_ADDR_FLOAT);
+    pb->tsl = new Adafruit_TSL2561_Unified(0x29);
 
     if (!pb->bmp.begin_I2C(0x77, pb->wire)) {
         LOG_ERROR("Failed to initialize BMP388 on Purpleboard");
-        delete pb->tsl;
-        delete pb->wire;
-        delete pb;
-        return PB_SENSOR_NO_DETECT;
+        result = PB_SENSOR_NO_DETECT;
+    } else {
+        // Set up oversampling and filter initialization
+        pb->bmp.setTemperatureOversampling(BMP3_OVERSAMPLING_8X);
+        pb->bmp.setPressureOversampling(BMP3_OVERSAMPLING_4X);
+        pb->bmp.setIIRFilterCoeff(BMP3_IIR_FILTER_COEFF_3);
+        pb->bmp.setOutputDataRate(BMP3_ODR_50_HZ);
+        LOG_DEBUG("Initialized BMP388 on Purpleboard");
     }
-    // Set up oversampling and filter initialization
-    pb->bmp.setTemperatureOversampling(BMP3_OVERSAMPLING_8X);
-    pb->bmp.setPressureOversampling(BMP3_OVERSAMPLING_4X);
-    pb->bmp.setIIRFilterCoeff(BMP3_IIR_FILTER_COEFF_3);
-    pb->bmp.setOutputDataRate(BMP3_ODR_50_HZ);
-    LOG_DEBUG("Initialized BMP388 on Purpleboard");
 
     if (!pb->ltr.begin(pb->wire)) {
         LOG_ERROR("Failed to initialize LTR390 on Purpleboard");
-        delete pb->tsl;
-        delete pb->wire;
-        delete pb;
-        return PB_SENSOR_NO_DETECT;
+        result = PB_SENSOR_NO_DETECT;
+    } else {
+        pb->ltr.setMode(LTR390_MODE_UVS);
+        pb->ltr.setResolution(LTR390_RESOLUTION_16BIT);
+        pb->ltr.setGain(LTR390_GAIN_1);
+        LOG_DEBUG("Initialized LTR390 on Purpleboard");
     }
-    pb->ltr.setMode(LTR390_MODE_UVS);
-    pb->ltr.setResolution(LTR390_RESOLUTION_16BIT);
-    pb->ltr.setGain(LTR390_GAIN_1);
-    LOG_DEBUG("Initialized LTR390 on Purpleboard");
+    
 
     if (!pb->aqi.begin(pb->wire)) {
         LOG_ERROR("Failed to initialize PM25AQI on Purpleboard");
-        delete pb->tsl;
-        delete pb->wire;
-        delete pb;
-        return PB_SENSOR_NO_DETECT;
+        result = PB_SENSOR_NO_DETECT;
+    } else {
+        LOG_DEBUG("Initialized PM25AQI on Purpleboard");
     }
-    LOG_DEBUG("Initialized PM25AQI on Purpleboard");
 
     if (!pb->tsl->begin(pb->wire)) {
         LOG_ERROR("Failed to initialize TSL2651 on Purpleboard");
-        delete pb->tsl;
-        delete pb->wire;
-        delete pb;
-        return PB_SENSOR_NO_DETECT;
+        result = PB_SENSOR_NO_DETECT;
+    } else {
+        pb->tsl->enableAutoRange(true);                             // Auto gain
+        pb->tsl->setIntegrationTime(TSL2561_INTEGRATIONTIME_101MS); // Medium resolution
+        LOG_DEBUG("Initialized TSL2651 on Purpleboard");
     }
-    pb->tsl->enableAutoRange(true); // Auto gain
-    pb->tsl->setIntegrationTime(TSL2561_INTEGRATIONTIME_101MS); // Medium resolution
-    LOG_DEBUG("Initialized TSL2651 on Purpleboard");
+    
 
-    LOG_DEBUG("Purpleboard successfully initialized");
+    LOG_DEBUG("Purpleboard finished initializing");
     *out_pb = pb;
-    return PB_OK;
+    return result;
 }
 
 leos_purpleboard_result_t leos_purpleboard_read(leos_purpleboard_t* pb, leos_purpleboard_readings_t *sensor_data) {
@@ -91,10 +86,8 @@ leos_purpleboard_result_t leos_purpleboard_read(leos_purpleboard_t* pb, leos_pur
         sensor_data->pressure_mb = -1.0;
     } else {
         sensor_data->temperature_c = pb->bmp.temperature;
-        sensor_data->pressure_mb = pb->bmp.pressure;
+        sensor_data->pressure_mb = pb->bmp.pressure / 100.0;
     }
-    sensor_data->temperature_c = pb->bmp.temperature;
-    sensor_data->pressure_mb = pb->bmp.pressure;
 
     //  I have no way to validate this!!
     sensor_data->uvs = pb->ltr.readUVS();
@@ -119,7 +112,7 @@ leos_purpleboard_result_t leos_purpleboard_read(leos_purpleboard_t* pb, leos_pur
     }
 
     sensors_event_t event;
-    if(!pb->tsl->getEvent(&event) || !event.light) {
+    if(!pb->tsl->getEvent(&event) && !event.light && false) {
         LOG_WARNING("Failed to read TSL2651 light value");
         result = PB_SENSOR_READ_DEGRADED;
         sensor_data->light_lux = -1;

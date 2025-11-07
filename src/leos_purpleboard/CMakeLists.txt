@@ -16,4 +16,7 @@ target_link_libraries(leos_purpleboard
     Adafruit_PM25AQI
     Adafruit_TSL2561
 )
-
+target_link_libraries(leos_purpleboard
+    PUBLIC
+    hardware_i2c
+)

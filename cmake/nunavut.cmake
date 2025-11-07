@@ -36,7 +36,7 @@ function(cyphal_generate_types)
     endforeach()
 
     # Derive a safe unique target name from path
-    file(RELATIVE_PATH REL_ROOT ${PROJECT_SOURCE_DIR} ${CYPHAL_DSDL_DIR})
+    file(RELATIVE_PATH REL_ROOT ${LEOS_SDK_ROOT} ${CYPHAL_DSDL_DIR})
     string(REPLACE "/" "_" SAFE_NAME "${REL_ROOT}")
     string(REPLACE "." "_" SAFE_NAME "${SAFE_NAME}")
     set(GEN_TARGET generate_cyphal_types_${CYPHAL_TARGET}_${SAFE_NAME})
@@ -57,7 +57,7 @@ function(cyphal_generate_types)
             ${LOOKUP_ARGS}                # <== Lookup namespaces
             --outdir ${CYPHAL_DSDL_GEN_DIR}
         COMMAND ${CMAKE_COMMAND} -E touch ${CYPHAL_DSDL_STAMP}
-        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+        WORKING_DIRECTORY ${LEOS_SDK_ROOT}
         DEPENDS ${CYPHAL_DSDL_DIR} ${CYPHAL_DSDL_LOOKUP_DIRS}
         COMMENT "Generating Cyphal DSDL for ${REL_ROOT} → ${CYPHAL_DSDL_GEN_DIR}"
         VERBATIM

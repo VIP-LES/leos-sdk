@@ -25,7 +25,7 @@ leos_purpleboard_result_t leos_purpleboard_init(i2c_inst_t *i2c, uint sda, uint 
     pb->sda = sda;
     pb->scl = scl;
     pb->wire = new TwoWire(i2c, sda, scl);
-    pb->tsl = new Adafruit_TSL2561_Unified(0x29);
+    pb->tsl = new Adafruit_TSL2561_Unified(TSL2561_ADDR_LOW);
 
     if (!pb->bmp.begin_I2C(0x77, pb->wire)) {
         LOG_ERROR("Failed to initialize BMP388 on Purpleboard");
@@ -112,7 +112,7 @@ leos_purpleboard_result_t leos_purpleboard_read(leos_purpleboard_t* pb, leos_pur
     }
 
     sensors_event_t event;
-    if(!pb->tsl->getEvent(&event) && !event.light && false) {
+    if(!pb->tsl->getEvent(&event) || !event.light) {
         LOG_WARNING("Failed to read TSL2651 light value");
         result = PB_SENSOR_READ_DEGRADED;
         sensor_data->light_lux = -1;

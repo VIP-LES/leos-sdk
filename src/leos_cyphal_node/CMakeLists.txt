@@ -7,14 +7,14 @@ add_library(leos_cyphal_node cyphal.c memory.c)
 
 cyphal_generate_types(
     TARGET leos_cyphal_node
-    DSDL_DIR ${PROJECT_SOURCE_DIR}/external/public_regulated_data_types/uavcan
+    DSDL_DIR ${LEOS_SDK_ROOT}/external/public_regulated_data_types/uavcan
 )
 
 # # Generate reg types — reg depends on uavcan, so pass uavcan as lookup
 cyphal_generate_types(
     TARGET leos_cyphal_node
-    DSDL_DIR ${PROJECT_SOURCE_DIR}/external/public_regulated_data_types/reg
-    DSDL_LOOKUP_DIRS ${PROJECT_SOURCE_DIR}/external/public_regulated_data_types/uavcan
+    DSDL_DIR ${LEOS_SDK_ROOT}/external/public_regulated_data_types/reg
+    DSDL_LOOKUP_DIRS ${LEOS_SDK_ROOT}/external/public_regulated_data_types/uavcan
 )
 
 target_include_directories(leos_cyphal_node

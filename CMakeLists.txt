@@ -2,8 +2,10 @@
 
 cmake_minimum_required(VERSION 3.13)
 
+set(LEOS_SDK_ROOT ${CMAKE_CURRENT_LIST_DIR})
+
 # Add our cmake include folder to the search path
-list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
+list(APPEND CMAKE_MODULE_PATH ${LEOS_SDK_ROOT}/cmake)
 
 # Ensure the compile definition can be read by InteliSense
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)

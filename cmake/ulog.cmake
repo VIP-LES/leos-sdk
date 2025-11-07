@@ -1,4 +1,5 @@
 add_subdirectory(
-    ${PROJECT_SOURCE_DIR}/external/ulog/src
+    ${LEOS_SDK_ROOT}/external/ulog/src
     ${CMAKE_BINARY_DIR}/external/ulog
+    EXCLUDE_FROM_ALL
 )

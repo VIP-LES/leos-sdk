@@ -1,4 +1,4 @@
-set(Adafruit_TSL2561_DIR ${PROJECT_SOURCE_DIR}/external/Adafruit_TSL2561/)
+set(Adafruit_TSL2561_DIR ${LEOS_SDK_ROOT}/external/Adafruit_TSL2561/)
 
 file(GLOB SRC_FILES ${Adafruit_TSL2561_DIR}/*.c ${Adafruit_TSL2561_DIR}/*.cpp)
 

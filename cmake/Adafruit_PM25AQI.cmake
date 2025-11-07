@@ -1,4 +1,4 @@
-set(Adafruit_PM25AQI_DIR ${PROJECT_SOURCE_DIR}/external/Adafruit_PM25AQI/)
+set(Adafruit_PM25AQI_DIR ${LEOS_SDK_ROOT}/external/Adafruit_PM25AQI/)
 
 file(GLOB SRC_FILES ${Adafruit_PM25AQI_DIR}/src/*.c ${Adafruit_PM25AQI_DIR}/src/*.cpp)
 

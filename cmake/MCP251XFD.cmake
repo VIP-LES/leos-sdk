@@ -1,18 +1,18 @@
 # MCP251XFD.cmake
 # Uses Github Emandhal/MCP251XFD as submodule and loads library as a CMake Lib
 
-set(MCP251XFD_SRC "${CMAKE_SOURCE_DIR}/external/MCP251XFD/MCP251XFD.c")
-set(MCP251XFD_HDR "${CMAKE_SOURCE_DIR}/external/MCP251XFD/MCP251XFD.h")
+set(MCP251XFD_SRC "${LEOS_SDK_ROOT}/external/MCP251XFD/MCP251XFD.c")
+set(MCP251XFD_HDR "${LEOS_SDK_ROOT}/external/MCP251XFD/MCP251XFD.h")
 
 
 # Create library with single source file
-add_library( MCP251XFD ${MCP251XFD_SRC} )
+add_library(MCP251XFD EXCLUDE_FROM_ALL ${MCP251XFD_SRC} )
 
 # Include the header file from the source dir
 target_include_directories(
     MCP251XFD
     PUBLIC
-    ${CMAKE_SOURCE_DIR}/external/MCP251XFD
+    ${LEOS_SDK_ROOT}/external/MCP251XFD
 )
 
 # Sets up a CMake variable to specify where the Conf file lives

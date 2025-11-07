@@ -1,7 +1,6 @@
-include(libcanard)
-include(o1heap)
 
 add_subdirectory(leos_log)
 add_subdirectory(leos_mcp251xfd)
 add_subdirectory(leos_cyphal_node)
 add_subdirectory(leos_canbus)
+add_subdirectory(leos_purpleboard)

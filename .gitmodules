@@ -13,3 +13,18 @@
 [submodule "external/public_regulated_data_types"]
 	path = external/public_regulated_data_types
 	url = https://github.com/OpenCyphal/public_regulated_data_types.git
+[submodule "external/Pico_BusIO"]
+	path = external/Pico_BusIO
+	url = https://github.com/VIP-LES/Pico_BusIO
+[submodule "external/Adafruit_TSL2561"]
+	path = external/Adafruit_TSL2561
+	url = https://github.com/adafruit/Adafruit_TSL2561
+[submodule "external/Adafruit_LTR390"]
+	path = external/Adafruit_LTR390
+	url = https://github.com/adafruit/Adafruit_LTR390
+[submodule "external/Adafruit_PM25AQI"]
+	path = external/Adafruit_PM25AQI
+	url = https://github.com/adafruit/Adafruit_PM25AQI
+[submodule "external/Adafruit_BMP3XX"]
+	path = external/Adafruit_BMP3XX
+	url = https://github.com/adafruit/Adafruit_BMP3XX

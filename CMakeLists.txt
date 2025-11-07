@@ -21,8 +21,15 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 
 endif()
 
-# Set up nunavut code generation commands
+# External dependencies
+include(libcanard)
+include(o1heap)
 include(nunavut)
+include(Pico_BusIO)
+include(Adafruit_BMP3XX)
+include(Adafruit_LTR390)
+include(Adafruit_PM25AQI)
+include(Adafruit_TSL2561)
 
 # Include all our sdk modules
 add_subdirectory(src)

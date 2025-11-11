@@ -4,7 +4,7 @@
 cmake_minimum_required(VERSION 3.15)
 
 # Bring in exernal/MCP251XFD library
-set(CONF_MCP251XFD_DIR ${CMAKE_CURRENT_SOURCE_DIR} CACHE STRING "Path for MCP251XFD driver")
+set(CONF_MCP251XFD_DIR ${CMAKE_CURRENT_LIST_DIR} CACHE STRING "Path for MCP251XFD driver" FORCE)
 include(MCP251XFD)
 
 add_library(leos_mcp251xfd EXCLUDE_FROM_ALL mcp251xfd.c platform.c)

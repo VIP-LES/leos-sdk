@@ -15,21 +15,11 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 
     # Pull in Pico SDK
-    set(PICO_BOARD pimoroni_pico_plus2_rp2350 CACHE STRING "Board type")
-
     include(pico_sdk_import)
-
 
     project(leos-sdk C CXX ASM)
 
     pico_sdk_init()
-
-    add_executable(main main.c config.c)
-    target_include_directories(main PRIVATE ${CMAKE_CURRENT_LIST_DIR})
-    target_link_libraries(main PUBLIC pico_stdlib leos_mcp251xfd leos_log leos_cyphal_transport_mcp251xfd leos_cyphal_node)
-    pico_enable_stdio_usb(main 1)
-    pico_add_extra_outputs(main)
-
 
 endif()
 
@@ -45,3 +35,18 @@ include(Adafruit_TSL2561)
 
 # Include all our sdk modules
 add_subdirectory(src)
+
+
+# cyphal_generate_types(
+#     TARGET TEMPLATE_PICO
+#     DSDL_DIR ${PROJECT_SOURCE_DIR}/external/public_regulated_data_types/uavcan
+# )
+
+# # Generate reg types — reg depends on uavcan, so pass uavcan as lookup
+# cyphal_generate_types(
+#     TARGET TEMPLATE_PICO
+#     DSDL_DIR ${PROJECT_SOURCE_DIR}/external/public_regulated_data_types/reg
+#     DSDL_LOOKUP_DIRS ${PROJECT_SOURCE_DIR}/external/public_regulated_data_types/uavcan
+# )
+
+

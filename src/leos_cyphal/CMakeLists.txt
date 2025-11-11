@@ -1,4 +1,4 @@
-add_library(leos_cyphal INTERFACE)
+add_library(leos_cyphal INTERFACE EXCLUDE_FROM_ALL)
 target_include_directories(leos_cyphal INTERFACE ${CMAKE_CURRENT_LIST_DIR}/include)
 target_link_libraries(leos_cyphal INTERFACE libcanard)
 

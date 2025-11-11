@@ -3,7 +3,7 @@
 
 cmake_minimum_required(VERSION 3.15)
 
-add_library(leos_cyphal_node cyphal.c memory.c)
+add_library(leos_cyphal_node EXCLUDE_FROM_ALL cyphal.c memory.c)
 
 cyphal_generate_types(
     TARGET leos_cyphal_node

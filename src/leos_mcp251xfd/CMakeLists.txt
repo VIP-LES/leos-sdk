@@ -7,7 +7,7 @@ cmake_minimum_required(VERSION 3.15)
 set(CONF_MCP251XFD_DIR ${CMAKE_CURRENT_SOURCE_DIR} CACHE STRING "Path for MCP251XFD driver")
 include(MCP251XFD)
 
-add_library(leos_mcp251xfd mcp251xfd.c platform.c)
+add_library(leos_mcp251xfd EXCLUDE_FROM_ALL mcp251xfd.c platform.c)
 
 target_include_directories(leos_mcp251xfd
     PRIVATE

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.15)
 
-add_library(leos_cyphal_transport transport.c)
+add_library(leos_cyphal_transport EXCLUDE_FROM_ALL transport.c)
 target_include_directories(leos_cyphal_transport
     PUBLIC
     ${CMAKE_CURRENT_LIST_DIR}/include
@@ -16,7 +16,7 @@ target_link_libraries(leos_cyphal_transport
 
 
 # MCP251XFD CAN-FD Transport
-add_library(leos_cyphal_transport_mcp251xfd STATIC mcp251xfd/driver.c)
+add_library(leos_cyphal_transport_mcp251xfd EXCLUDE_FROM_ALL STATIC mcp251xfd/driver.c)
 target_include_directories(leos_cyphal_transport_mcp251xfd PUBLIC
     ${CMAKE_CURRENT_LIST_DIR}/mcp251xfd/include
 )

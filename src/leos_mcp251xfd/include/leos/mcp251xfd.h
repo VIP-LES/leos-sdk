@@ -45,8 +45,8 @@ typedef void (*leos_mcp251xfd_rx_cb)(MCP251XFD *device, void *user_reference);
  *     interrupts and enables interrupts for @ref hw->pin_irq.
  *
  *     If `false`, the caller is responsible for configuring the GPIO interrupt
- *     system and must manually call @ref leos_mcp251xfd_irq_handler() from their
- *     own ISR handler.
+ *     system and MUST manually call @ref leos_mcp251xfd_irq_handler() from their
+ *     own ISR handler that is setup BEFORE calling @ref leos_mcp251xfd_init()!
  *
 void leos_mcp251xfd_deinit(MCP251XFD *dev);
  * @return eERRORRESULT
@@ -110,7 +110,7 @@ void leos_mcp251xfd_task(MCP251XFD *dev);
  * @param callback        The receive callback function.
  * @param user_reference  Opaque pointer passed to the callback on invocation.
  */
-void leos_mcp251xfd_set_rx_callback(MCP251XFD *dev,
+void leos_mcp251xfd_set_rx_handler(MCP251XFD *dev,
                                     leos_mcp251xfd_rx_cb callback,
                                     void *user_reference);
 

@@ -21,6 +21,7 @@ static leos_mcp251xfd_ctx_t *s_ctx_by_gpio[48] = {0};
 
 eERRORRESULT leos_mcp251xfd_init(MCP251XFD *device, const leos_mcp251xfd_hw_t *hw, const leos_mcp251xfd_config_t *config, bool attachInterrupt)
 {
+    memset(device, 0, sizeof(MCP251XFD));
     LOG_INFO("Initializing MCP251XFD");
     LOG_TRACE("SPI Block: %d", hw->spi);
     LOG_TRACE("SPI Baud: %d", hw->spi_baud);
@@ -43,11 +44,12 @@ eERRORRESULT leos_mcp251xfd_init(MCP251XFD *device, const leos_mcp251xfd_hw_t *h
     gpio_init(hw->pin_irq);
     gpio_set_dir(hw->pin_irq, GPIO_IN);
     gpio_pull_up(hw->pin_irq);
-    gpio_set_irq_enabled(hw->pin_irq, GPIO_IRQ_EDGE_FALL, true);
     if (attachInterrupt) {
         leos_mcp251xfd_attach_gpio_interrupt();
     }
-    
+    irq_set_enabled(IO_IRQ_BANK0, true);
+    gpio_set_irq_enabled(hw->pin_irq, GPIO_IRQ_EDGE_FALL, true);
+
     // Store the config in a array map to the irq gpio
     if (hw->pin_irq >= count_of(s_ctx_by_gpio)) {
         LOG_ERROR("MCP251XFD IRQ pin out of range for RP2350 Limits (48)");
@@ -175,64 +177,123 @@ void leos_mcp251xfd_set_rx_handler(MCP251XFD *dev, leos_mcp251xfd_rx_cb callback
 }
 
 void leos_mcp251xfd_task(MCP251XFD *dev) {
-    if (!dev) return;
-    leos_mcp251xfd_ctx_t *ctx = (leos_mcp251xfd_ctx_t*) dev->UserDriverData;
+    if (!dev)
+        return;
+    leos_mcp251xfd_ctx_t *ctx = (leos_mcp251xfd_ctx_t *)dev->UserDriverData;
+    if (!ctx)
+        return;
 
-    // Nothing to do unless theres an irq waiting to service
-    if (!ctx || !ctx->irq_pending) return;
-
+    // Only run when an IRQ was latched by the GPIO handler.
+    if (!ctx->irq_pending)
+        return;
     ctx->irq_pending = false;
+    LOG_DEBUG("MCP251XFD: servicing IRQ");
 
     eERRORRESULT err;
     eMCP251XFD_InterruptFlagCode code;
 
-    while(true) {
+    // Keep fetching the highest-priority pending event until none remain.
+    while(true)
+    {
         err = MCP251XFD_GetCurrentInterruptEvent(dev, &code);
-        if (err != ERR_OK) {
-            LOG_ERROR("MCP251XFD_GetCurrentInterruptEvent failed: %d", err);
+        if (err != ERR_OK)
+        {
+            LOG_ERROR("GetCurrentInterruptEvent failed: %d", err);
+            break;
+        }
+        if (code == MCP251XFD_NO_INTERRUPT)
+        {
+            LOG_TRACE("No int anymore");
+            // All clear
             break;
         }
 
-        if (code == MCP251XFD_NO_INTERRUPT)
+        LOG_TRACE("IRQ event: %d", code);
+
+        switch (code)
+        {
+        case MCP251XFD_ERROR_INTERRUPT:
+        {
+            LOG_WARNING("There was an error on the CAN bus. Most likely no other devices are connected");
+            eMCP251XFD_TXRXErrorStatus bus_status;
+            MCP251XFD_GetTransmitReceiveErrorStatus(dev, &bus_status);
+            LOG_DEBUG("Bus Error: %d", bus_status);
+
+
+            MCP251XFD_ClearInterruptEvents(dev, MCP251XFD_INT_BUS_ERROR_EVENT);
             break;
+        }
 
-        switch (code) {
-            case MCP251XFD_ERROR_INTERRUPT:
-                LOG_TRACE("MCP251XFD bus error interrupt");
-                MCP251XFD_ClearInterruptEvents(dev, MCP251XFD_INT_BUS_ERROR_EVENT);
+        case MCP251XFD_WAKEUP_INTERRUPT:
+        {
+            MCP251XFD_ClearInterruptEvents(dev, MCP251XFD_INT_BUS_WAKEUP_EVENT);
+            break;
+        }
+
+        case MCP251XFD_OPMODE_CHANGE_OCCURED:
+        {
+            eMCP251XFD_OperationMode op;
+            if (MCP251XFD_GetActualOperationMode(dev, &op) == ERR_OK)
+            {
+                LOG_DEBUG("OPMODE -> %d", op);
+            }
+            MCP251XFD_ClearInterruptEvents(dev, MCP251XFD_INT_OPERATION_MODE_CHANGE_EVENT);
+            break;
+        }
+
+        case MCP251XFD_TXQ_INTERRUPT:
+        {
+            // Clear any TXQ-related FIFO events, then the global TX event.
+            eMCP251XFD_TXQstatus qst;
+            err = MCP251XFD_GetTXQStatus(dev, &qst);
+            if (err != ERR_OK)
+            {
+                LOG_ERROR("GetTXQStatus failed: %d", err);
                 break;
+            }
+            if (qst & MCP251XFD_TXQ_ATTEMPTS_EXHAUSTED) {
+                MCP251XFD_ResetTXQ(dev);
+                // MCP251XFD_ClearTXQAttemptsEvent(dev);
+            }
+            // MCP251XFD_ClearInterruptEvents(dev, MCP251XFD_INT_TX_EVENT);
+            break;
+        }
 
-            case MCP251XFD_WAKEUP_INTERRUPT:
-                MCP251XFD_ClearInterruptEvents(dev, MCP251XFD_INT_BUS_WAKEUP_EVENT);
-                break;
-
-            case MCP251XFD_OPMODE_CHANGE_OCCURED:
-                {
-                eMCP251XFD_OperationMode op;
-                if (MCP251XFD_GetActualOperationMode(dev, &op) == ERR_OK) {
-                    LOG_DEBUG("MCP251XFD opmode changed to %d", op);
-                }
-                MCP251XFD_ClearInterruptEvents(dev, MCP251XFD_INT_OPERATION_MODE_CHANGE_EVENT);
-                break;
-                }
-
-            case MCP251XFD_FIFO1_INTERRUPT:
-                {
-                eMCP251XFD_FIFOstatus status;
-                err = MCP251XFD_GetFIFOStatus(dev, MCP251XFD_FIFO1, &status);
+        case MCP251XFD_FIFO1_INTERRUPT:
+        {
+                eMCP251XFD_FIFOstatus st;
+                err = MCP251XFD_GetFIFOStatus(dev, MCP251XFD_FIFO1, &st);
+                LOG_TRACE("RX FIFO Status: %d", st);
                 if (err != ERR_OK) {
-                    LOG_ERROR("MCP251XFD_GetFIFOStatus(FIFO1) failed: %d", err);
+                    LOG_ERROR("GetFIFOStatus(FIFO1) failed: %d", err);
                     break;
                 }
-                if (status & MCP251XFD_RX_FIFO_NOT_EMPTY) {
-                    // The RX FIFO should be serviced, forward to the receive callback.
-                    if (ctx->rx_cb)
+                if ((st & MCP251XFD_RX_FIFO_NOT_EMPTY)) {
+                    if (ctx->rx_cb) {
                         ctx->rx_cb(dev, ctx->cb_user_reference);
+                    } else {
+                        // If no callback is installed, consume one frame to unblock IRQs.
+                        // (Implement a small "discard" receive here if needed by your lib.)
+                        // For now, just break to avoid a tight loop:
+                        LOG_WARNING("RX FIFO not empty but no rx_cb installed");
+                    }
                 }
-                break;
-                }
+            MCP251XFD_ClearFIFOEvents(dev, MCP251XFD_FIFO1,
+                                      MCP251XFD_FIFO_RECEIVE_FIFO_NOT_EMPTY_INT |
+                                          MCP251XFD_FIFO_RECEIVE_FIFO_HALF_FULL_INT |
+                                          MCP251XFD_FIFO_RECEIVE_FIFO_FULL_INT);
+            MCP251XFD_ClearInterruptEvents(dev, MCP251XFD_INT_RX_EVENT);
+            break;
+        }
+
+        default:
+        {
+            // Clear any clearable system bits to avoid stalls
+            MCP251XFD_ClearInterruptEvents(dev,
+                                           MCP251XFD_INT_CLEARABLE_FLAGS_MASK);
+            LOG_TRACE("Unhandled event %d cleared (mask=CiINT clearables)", code);
+            break;
+        }
         }
     }
 }
-
-

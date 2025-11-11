@@ -81,39 +81,7 @@ eERRORRESULT MCP251XFD_InterfaceTransfer_Pico(void* pIntDev, uint8_t chipSelect,
     // For most cases, the driver will be padding the TX with zeroes
     // or garbage data so that it gets back the desired RX length.
 
-    // The protocol for the MCP251X family of chips uses SPI as a direct
-    // memory bus access for RAM, so this is the lowest level of data.
-
-    for (int i = 0; i < size; i++) {
-
-        absolute_time_t stop_time = make_timeout_time_us(SPI_TIMEOUT_US);
-        while (!spi_is_writable(hw->spi)) {
-            if (get_absolute_time() >= stop_time) {
-                gpio_put(chipSelect, 1);
-                restore_interrupts(irqs);
-                LOG_ERROR("SPI write timeout on cs_pin %d", chipSelect);
-                return ERR__SPI_TIMEOUT;
-            }
-        }
-
-        // Using raw register access to store the TX byte in the data register, sending over SPI
-        spi_get_hw(hw->spi)->dr = *txData++;
-
-        stop_time = make_timeout_time_us(SPI_TIMEOUT_US);
-        while (!spi_is_readable(hw->spi)) {
-            if (get_absolute_time() >= stop_time) {
-                gpio_put(chipSelect, 1);
-                restore_interrupts(irqs);
-                LOG_ERROR("SPI read timeout on cs_pin %d", chipSelect);
-                return ERR__SPI_TIMEOUT;
-            }
-        }
-
-        // Load lower byte of data register as a byte received
-        uint8_t dataRead = (uint8_t)(spi_get_hw(hw->spi)->dr & 0x000000FF);
-        if (rxData)
-            *rxData++ = dataRead;
-    }
+    spi_write_read_blocking(hw->spi, txData, rxData, size);
 
     gpio_put(chipSelect, 1);
     restore_interrupts(irqs);

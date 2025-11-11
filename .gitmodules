@@ -16,6 +16,7 @@
 [submodule "external/Pico_BusIO"]
 	path = external/Pico_BusIO
 	url = https://github.com/VIP-LES/Pico_BusIO
+	branch = master
 [submodule "external/Adafruit_TSL2561"]
 	path = external/Adafruit_TSL2561
 	url = https://github.com/adafruit/Adafruit_TSL2561

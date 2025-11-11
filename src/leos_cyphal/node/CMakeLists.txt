@@ -16,7 +16,6 @@ cyphal_generate_types(
     DSDL_DIR ${LEOS_SDK_ROOT}/external/public_regulated_data_types/reg
     DSDL_LOOKUP_DIRS ${LEOS_SDK_ROOT}/external/public_regulated_data_types/uavcan
 )
-
 target_include_directories(leos_cyphal_node
     PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -28,12 +27,13 @@ target_include_directories(leos_cyphal_node
 target_link_libraries(leos_cyphal_node
     PRIVATE
     leos_log
-    leos_canbus
+    leos_cyphal_transport
     pico_stdlib
     o1heap
 )
 target_link_libraries(leos_cyphal_node
     PUBLIC
+    leos_cyphal
     libcanard
     pico_time
 )

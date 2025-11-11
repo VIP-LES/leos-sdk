@@ -3,12 +3,12 @@
  * @brief Deterministic memory allocator implementation using o1heap for libcanard.
  */
 
-#include "leos/cyphal/memory.h"
+#include "memory.h"
 #include "leos/log.h"
 #include "o1heap.h"
 #include "pico/stdlib.h"
 
-#define O1HEAP_ARENA_SIZE (16 * 1024)
+#define O1HEAP_ARENA_SIZE (64 * 1024)
 static uint8_t o1heap_arena[O1HEAP_ARENA_SIZE] __attribute__((aligned(O1HEAP_ALIGNMENT)));
 static O1HeapInstance* heap = NULL;
 

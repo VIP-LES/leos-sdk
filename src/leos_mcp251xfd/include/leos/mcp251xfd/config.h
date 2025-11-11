@@ -2,8 +2,6 @@
 #include "hardware/spi.h"
 #include "MCP251XFD.h"
 
-typedef void (*leos_mcp251xfd_irq_cb_t)(void* user_ref);
-
 /**
  * @brief SPI configuration for the Raspberry Pi Pico.
  *
@@ -37,8 +35,4 @@ typedef struct {
     const MCP251XFD_Filter *filter;
     size_t num_filters;
     eMCP251XFD_OperationMode initial_mode;
-
-    leos_mcp251xfd_irq_cb_t irq_callback;
-    void* irq_user_ref;
-
 } leos_mcp251xfd_config_t;

@@ -3,40 +3,57 @@
 #include "leos/mcp251xfd/config.h"
 #include "hardware/sync.h"
 #include "pico/stdlib.h"
-#include "pico/time.h"
 #include "platform.h"
 #include <string.h>
 
-static const leos_mcp251xfd_config_t *s_mcp_by_gpio[48] = {0};
 
-void leos_mcp251xfd_check_irq(uint gpio, uint32_t events) {
-    if (!(events & GPIO_IRQ_EDGE_FALL)) return;
+// Dynamically allocated struct storing config info and state for the driver
+typedef struct {
+    const leos_mcp251xfd_hw_t *hw;
+    const leos_mcp251xfd_config_t *cfg;
+    volatile bool irq_pending;
+    leos_mcp251xfd_rx_cb rx_cb;
+    void* cb_user_reference;
+} leos_mcp251xfd_ctx_t;
 
-    const leos_mcp251xfd_config_t *config = s_mcp_by_gpio[gpio];
-    if (!config || !config->irq_callback)
-        return;
+// Lookup table for an initialized controller by its interrupt pin
+static leos_mcp251xfd_ctx_t *s_ctx_by_gpio[48] = {0};
 
-    config->irq_callback(config->irq_user_ref);
-}
-
-
-/* ========== MCP251XFD Initialization Helpers ========== */
-
-eERRORRESULT leos_mcp251xfd_init(MCP251XFD *device, const leos_mcp251xfd_hw_t *hw, const leos_mcp251xfd_config_t *config)
+eERRORRESULT leos_mcp251xfd_init(MCP251XFD *device, const leos_mcp251xfd_hw_t *hw, const leos_mcp251xfd_config_t *config, bool attachInterrupt)
 {
-    // Ensure the device structure starts zeroed to avoid garbage DriverConfig or other flags
-    memset(device, 0, sizeof(*device));
+    LOG_INFO("Initializing MCP251XFD");
+    LOG_TRACE("SPI Block: %d", hw->spi);
+    LOG_TRACE("SPI Baud: %d", hw->spi_baud);
+    LOG_TRACE("MOSI: %d, MISO: %d, SCK: %d, CS: %d, IRQ: %d", hw->pin_mosi, hw->pin_miso, hw->pin_sck, hw->pin_cs, hw->pin_irq);
+
+    // Setup a context struct to store in the user reference
+    leos_mcp251xfd_ctx_t* ctx = (leos_mcp251xfd_ctx_t*) malloc(sizeof(leos_mcp251xfd_ctx_t));
+    if (ctx == NULL) {
+        LOG_ERROR("leos_mcp251xfd: Could not malloc for the context struct");
+        return ERR__OUT_OF_MEMORY;
+    }
+    ctx->hw = hw;
+    ctx->cfg = config;
+    ctx->irq_pending = false;
+    ctx->rx_cb = NULL;
+    ctx->cb_user_reference = NULL;
+    device->UserDriverData = (void *)ctx;
 
     // Setup IRQ
     gpio_init(hw->pin_irq);
     gpio_set_dir(hw->pin_irq, GPIO_IN);
     gpio_pull_up(hw->pin_irq);
     gpio_set_irq_enabled(hw->pin_irq, GPIO_IRQ_EDGE_FALL, true);
+    if (attachInterrupt) {
+        leos_mcp251xfd_attach_gpio_interrupt();
+    }
     
     // Store the config in a array map to the irq gpio
-    if (hw->pin_irq >= count_of(s_mcp_by_gpio))
+    if (hw->pin_irq >= count_of(s_ctx_by_gpio)) {
+        LOG_ERROR("MCP251XFD IRQ pin out of range for RP2350 Limits (48)");
         return ERR__OUT_OF_RANGE;
-    s_mcp_by_gpio[hw->pin_irq] = config;
+    }
+    s_ctx_by_gpio[hw->pin_irq] = ctx;
 
 
     // Fill device with HAL configuration
@@ -100,22 +117,15 @@ eERRORRESULT leos_mcp251xfd_init(MCP251XFD *device, const leos_mcp251xfd_hw_t *h
         return timestamp_result;
     }
 
-    // Since the config is now const, we should NOT fill the RamInfo return slots, and instead they must be
-    // initialized as NULL to signify they are not used.
-
-
-    // MCP251XFD_RAMInfos FIFO_ram_info[config->num_fifos]; // Will hold info for fifos
-    // for (int i = 0; i < config->num_fifos; i++) { // Set RAM Info return pointers to our array
-    //     config->fifo[i].RAMInfos = &FIFO_ram_info[i];
-    // }
-
     eERRORRESULT fifo_result = MCP251XFD_ConfigureFIFOList(device, (MCP251XFD_FIFO*) config->fifo, config->num_fifos);
     if (fifo_result != ERR_OK) {
+        LOG_ERROR("MCP251XFD Instance failed to configure FIFOs");
         return fifo_result;
     }
 
     eERRORRESULT filter_result = MCP251XFD_ConfigureFilterList(device, MCP251XFD_D_NET_FILTER_DISABLE, (MCP251XFD_Filter*) config->filter, config->num_filters);
     if (filter_result != ERR_OK) {
+        LOG_ERROR("MCP251XFD Instance failed to configure Filters");
         return filter_result;
     }
 
@@ -124,3 +134,105 @@ eERRORRESULT leos_mcp251xfd_init(MCP251XFD *device, const leos_mcp251xfd_hw_t *h
     // Start chip in CAN-FD mode. Configuration is closed.
     return MCP251XFD_RequestOperationMode(device, config->initial_mode, true);
 }
+
+void leos_mcp251xfd_deinit(MCP251XFD *dev) {
+    if (!dev) return;
+    leos_mcp251xfd_ctx_t *ctx = (leos_mcp251xfd_ctx_t*) dev->UserDriverData;
+    if (!ctx) return;
+
+    gpio_set_irq_enabled(ctx->hw->pin_irq, GPIO_IRQ_EDGE_FALL, false);
+    s_ctx_by_gpio[ctx->hw->pin_irq] = NULL;
+
+    free(ctx);
+    dev->UserDriverData = NULL;
+}
+
+
+void leos_mcp251xfd_irq_handler(uint gpio, uint32_t events) {
+    if (!(events & GPIO_IRQ_EDGE_FALL)) return;
+
+    if (gpio >= count_of(s_ctx_by_gpio)) return;
+    leos_mcp251xfd_ctx_t* ctx = s_ctx_by_gpio[gpio];
+    if (!ctx) return;
+    ctx->irq_pending = true;
+}
+
+static void gpio_cb(uint gpio, uint32_t events) {
+    leos_mcp251xfd_irq_handler(gpio, events);
+}
+void leos_mcp251xfd_attach_gpio_interrupt() {
+    LOG_DEBUG("Binding this core's GPIO irq handler to the MCP251XFD driver");
+    gpio_set_irq_callback(gpio_cb);
+}
+
+void leos_mcp251xfd_set_rx_handler(MCP251XFD *dev, leos_mcp251xfd_rx_cb callback, void *user_reference) {
+    if (!dev) return;
+    leos_mcp251xfd_ctx_t *ctx = (leos_mcp251xfd_ctx_t*) dev->UserDriverData;
+    if (!ctx) return;
+
+    ctx->rx_cb = callback;
+    ctx->cb_user_reference = user_reference;
+}
+
+void leos_mcp251xfd_task(MCP251XFD *dev) {
+    if (!dev) return;
+    leos_mcp251xfd_ctx_t *ctx = (leos_mcp251xfd_ctx_t*) dev->UserDriverData;
+
+    // Nothing to do unless theres an irq waiting to service
+    if (!ctx || !ctx->irq_pending) return;
+
+    ctx->irq_pending = false;
+
+    eERRORRESULT err;
+    eMCP251XFD_InterruptFlagCode code;
+
+    while(true) {
+        err = MCP251XFD_GetCurrentInterruptEvent(dev, &code);
+        if (err != ERR_OK) {
+            LOG_ERROR("MCP251XFD_GetCurrentInterruptEvent failed: %d", err);
+            break;
+        }
+
+        if (code == MCP251XFD_NO_INTERRUPT)
+            break;
+
+        switch (code) {
+            case MCP251XFD_ERROR_INTERRUPT:
+                LOG_TRACE("MCP251XFD bus error interrupt");
+                MCP251XFD_ClearInterruptEvents(dev, MCP251XFD_INT_BUS_ERROR_EVENT);
+                break;
+
+            case MCP251XFD_WAKEUP_INTERRUPT:
+                MCP251XFD_ClearInterruptEvents(dev, MCP251XFD_INT_BUS_WAKEUP_EVENT);
+                break;
+
+            case MCP251XFD_OPMODE_CHANGE_OCCURED:
+                {
+                eMCP251XFD_OperationMode op;
+                if (MCP251XFD_GetActualOperationMode(dev, &op) == ERR_OK) {
+                    LOG_DEBUG("MCP251XFD opmode changed to %d", op);
+                }
+                MCP251XFD_ClearInterruptEvents(dev, MCP251XFD_INT_OPERATION_MODE_CHANGE_EVENT);
+                break;
+                }
+
+            case MCP251XFD_FIFO1_INTERRUPT:
+                {
+                eMCP251XFD_FIFOstatus status;
+                err = MCP251XFD_GetFIFOStatus(dev, MCP251XFD_FIFO1, &status);
+                if (err != ERR_OK) {
+                    LOG_ERROR("MCP251XFD_GetFIFOStatus(FIFO1) failed: %d", err);
+                    break;
+                }
+                if (status & MCP251XFD_RX_FIFO_NOT_EMPTY) {
+                    // The RX FIFO should be serviced, forward to the receive callback.
+                    if (ctx->rx_cb)
+                        ctx->rx_cb(dev, ctx->cb_user_reference);
+                }
+                break;
+                }
+        }
+    }
+}
+
+

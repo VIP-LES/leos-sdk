@@ -35,11 +35,19 @@ function(cyphal_generate_types)
         list(APPEND LOOKUP_ARGS --lookup-dir ${LU})
     endforeach()
 
-    # Derive a safe unique target name from path
-    file(RELATIVE_PATH REL_ROOT ${LEOS_SDK_ROOT} ${CYPHAL_DSDL_DIR})
-    string(REPLACE "/" "_" SAFE_NAME "${REL_ROOT}")
-    string(REPLACE "." "_" SAFE_NAME "${SAFE_NAME}")
-    set(GEN_TARGET generate_cyphal_types_${CYPHAL_TARGET}_${SAFE_NAME})
+    # Derive a stable safe name for the DSDL directory
+    get_filename_component(DSDL_BASENAME "${CYPHAL_DSDL_DIR}" NAME)
+    string(REPLACE "." "_" DSDL_SAFE "${DSDL_BASENAME}")
+    string(REPLACE "-" "_" DSDL_SAFE "${DSDL_SAFE}")
+    string(REPLACE "/" "_" DSDL_SAFE "${DSDL_SAFE}")
+
+    # Add a short 6-char hash for uniqueness (based on absolute path)
+    string(MD5 DSDL_HASH "${CYPHAL_DSDL_DIR}")
+    string(SUBSTRING "${DSDL_HASH}" 0 6 DSDL_HASH_SHORT)
+
+    # Compose a final safe name and target
+    set(SAFE_NAME "${DSDL_SAFE}_${DSDL_HASH_SHORT}")
+    set(GEN_TARGET "generate_cyphal_types_${CYPHAL_TARGET}_${SAFE_NAME}")
 
     # Output directory shared per firmware target
     set(CYPHAL_DSDL_GEN_DIR ${PROJECT_BINARY_DIR}/generated_dsdl/${CYPHAL_TARGET})
@@ -52,14 +60,14 @@ function(cyphal_generate_types)
         OUTPUT ${CYPHAL_DSDL_STAMP}
         COMMAND ${NNVG_EXE}
             --target-language c
+            --allow-unregulated-fixed-port-id
             # --enable-serialization-asserts
             ${CYPHAL_DSDL_DIR}            # <== Root namespace (positional)
             ${LOOKUP_ARGS}                # <== Lookup namespaces
             --outdir ${CYPHAL_DSDL_GEN_DIR}
         COMMAND ${CMAKE_COMMAND} -E touch ${CYPHAL_DSDL_STAMP}
-        WORKING_DIRECTORY ${LEOS_SDK_ROOT}
         DEPENDS ${CYPHAL_DSDL_DIR} ${CYPHAL_DSDL_LOOKUP_DIRS}
-        COMMENT "Generating Cyphal DSDL for ${REL_ROOT} → ${CYPHAL_DSDL_GEN_DIR}"
+        COMMENT "Generating Cyphal DSDL for ${REL_ROOT} -> ${CYPHAL_DSDL_GEN_DIR}"
         VERBATIM
     )
 

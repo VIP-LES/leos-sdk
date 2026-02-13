@@ -17,15 +17,18 @@
 	path = external/Pico_BusIO
 	url = https://github.com/VIP-LES/Pico_BusIO
 	branch = master
-[submodule "external/Adafruit_TSL2561"]
-	path = external/Adafruit_TSL2561
-	url = https://github.com/adafruit/Adafruit_TSL2561
 [submodule "external/Adafruit_LTR390"]
 	path = external/Adafruit_LTR390
 	url = https://github.com/adafruit/Adafruit_LTR390
 [submodule "external/Adafruit_PM25AQI"]
 	path = external/Adafruit_PM25AQI
 	url = https://github.com/adafruit/Adafruit_PM25AQI
-[submodule "external/Adafruit_BMP3XX"]
-	path = external/Adafruit_BMP3XX
-	url = https://github.com/adafruit/Adafruit_BMP3XX
+[submodule "external/Adafruit_BME680"]
+	path = external/Adafruit_BME680
+	url = https://github.com/adafruit/Adafruit_BME680.git
+[submodule "external/Adafruit_TSL2591_Library"]
+	path = external/Adafruit_TSL2591_Library
+	url = https://github.com/adafruit/Adafruit_TSL2591_Library.git
+[submodule "external/Adafruit_Sensor"]
+	path = external/Adafruit_Sensor
+	url = https://github.com/adafruit/Adafruit_Sensor.git

@@ -1,9 +1,9 @@
 #include "leos/purpleboard.h"
 #include "leos/log.h"
-#include "Adafruit_BMP3XX.h"
+#include "Adafruit_BME680.h"
 #include "Adafruit_LTR390.h"
-#include "Adafruit_PM25AQI_I2C.h"
-#include "Adafruit_TSL2561_U.h"
+#include "Adafruit_PM25AQI.h"
+#include "Adafruit_TSL2591.h"
 
 
 struct leos_purpleboard {
@@ -11,12 +11,13 @@ struct leos_purpleboard {
     uint sda;
     uint scl;
     TwoWire* wire;
-    Adafruit_BMP3XX bmp;
-    Adafruit_LTR390 ltr;
-    Adafruit_PM25AQI_I2C aqi;
-    Adafruit_TSL2561_Unified* tsl;
-};
 
+    Adafruit_BME680* bme;
+    Adafruit_LTR390* ltr;
+    Adafruit_PM25AQI* aqi;
+    Adafruit_TSL2561_library* tsl;
+
+};
 leos_purpleboard_result_t leos_purpleboard_init(i2c_inst_t *i2c, uint sda, uint scl, leos_purpleboard_t **out_pb) {
     leos_purpleboard_result_t result = PB_OK;
     LOG_DEBUG("Initializing Purpleboard stack");
@@ -25,21 +26,26 @@ leos_purpleboard_result_t leos_purpleboard_init(i2c_inst_t *i2c, uint sda, uint 
     pb->sda = sda;
     pb->scl = scl;
     pb->wire = new TwoWire(i2c, sda, scl);
-    pb->tsl = new Adafruit_TSL2561_Unified(TSL2561_ADDR_LOW);
 
-    if (!pb->bmp.begin_I2C(0x77, pb->wire)) {
-        LOG_ERROR("Failed to initialize BMP388 on Purpleboard");
+    pb->bme = new Adafruit_BME680();
+    pb->ltr = new Adafruit_LTR390();
+    pb->aqi = new Adafruit_PM25AQI();
+    pb->tsl = new  Adafruit_TSL2591_library();
+
+    if (!pb->bme->begin(pb->wire)){
+        LOG_ERROR("Failed to initialize BME680 on Purpleboard");
         result = PB_SENSOR_NO_DETECT;
-    } else {
-        // Set up oversampling and filter initialization
-        pb->bmp.setTemperatureOversampling(BMP3_OVERSAMPLING_8X);
-        pb->bmp.setPressureOversampling(BMP3_OVERSAMPLING_4X);
-        pb->bmp.setIIRFilterCoeff(BMP3_IIR_FILTER_COEFF_3);
-        pb->bmp.setOutputDataRate(BMP3_ODR_50_HZ);
-        LOG_DEBUG("Initialized BMP388 on Purpleboard");
+    } else{
+        pb->bme->setTemperatureOversampling(BME680_OS_8X);
+        pb->bme->setHumidityOversampling(BME680_OS_2X);
+        pb->bme->setPressureOversampling(BME680_OS_4X);
+        pb->bme->setIIRFilterSize(BME680_FILTER_SIZE_3);
+        pb->bme->setGasHeater(320, 150);
+        LOG_DEBUG("Initialized BME680 on Purpleboard");
     }
 
-    if (!pb->ltr.begin(pb->wire)) {
+
+    if (!pb->ltr->begin(pb->wire)) {
         LOG_ERROR("Failed to initialize LTR390 on Purpleboard");
         result = PB_SENSOR_NO_DETECT;
     } else {
@@ -50,7 +56,9 @@ leos_purpleboard_result_t leos_purpleboard_init(i2c_inst_t *i2c, uint sda, uint 
     }
     
 
-    if (!pb->aqi.begin(pb->wire)) {
+    aqi.begin_I2C(); // ??
+
+    if (!pb->aqi->begin_I2C(pb->wire)) {
         LOG_ERROR("Failed to initialize PM25AQI on Purpleboard");
         result = PB_SENSOR_NO_DETECT;
     } else {
@@ -58,12 +66,12 @@ leos_purpleboard_result_t leos_purpleboard_init(i2c_inst_t *i2c, uint sda, uint 
     }
 
     if (!pb->tsl->begin(pb->wire)) {
-        LOG_ERROR("Failed to initialize TSL2651 on Purpleboard");
+        LOG_ERROR("Failed to initialize TSL2591 on Purpleboard");
         result = PB_SENSOR_NO_DETECT;
     } else {
-        pb->tsl->enableAutoRange(true);                             // Auto gain
-        pb->tsl->setIntegrationTime(TSL2561_INTEGRATIONTIME_101MS); // Medium resolution
-        LOG_DEBUG("Initialized TSL2651 on Purpleboard");
+        pb->tsl->setGain(TSL2591_GAIN_MED);
+        pb->tsl->setTiming(TSL2591_INTEGRATIONTIME_300MS);
+        LOG_DEBUG("Initialized TSL2591 on Purpleboard");
     }
     
 

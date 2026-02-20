@@ -26,7 +26,6 @@ extern "C"
 
         float lux; // TSL2591
 
-        uint32_t ltr390_als;
         uint32_t ltr390_uvs; // LTR390
 
         uint16_t pm10_env;

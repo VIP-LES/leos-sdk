@@ -12,7 +12,7 @@ struct leos_purpleboard {
     uint scl;
     TwoWire* wire;
 
-    Adafruit_BME680* bme;
+    Adafruit_BME680* bmp;
     Adafruit_LTR390* ltr;
     Adafruit_PM25AQI* aqi;
     Adafruit_TSL2561_library* tsl;
@@ -27,20 +27,20 @@ leos_purpleboard_result_t leos_purpleboard_init(i2c_inst_t *i2c, uint sda, uint 
     pb->scl = scl;
     pb->wire = new TwoWire(i2c, sda, scl);
 
-    pb->bme = new Adafruit_BME680();
+    pb->bmp = new Adafruit_BME680();
     pb->ltr = new Adafruit_LTR390();
     pb->aqi = new Adafruit_PM25AQI();
     pb->tsl = new  Adafruit_TSL2591_library();
 
-    if (!pb->bme->begin(pb->wire)){
+    if (!pb->bmp->begin(pb->wire)){
         LOG_ERROR("Failed to initialize BME680 on Purpleboard");
         result = PB_SENSOR_NO_DETECT;
     } else{
-        pb->bme->setTemperatureOversampling(BME680_OS_8X);
-        pb->bme->setHumidityOversampling(BME680_OS_2X);
-        pb->bme->setPressureOversampling(BME680_OS_4X);
-        pb->bme->setIIRFilterSize(BME680_FILTER_SIZE_3);
-        pb->bme->setGasHeater(320, 150);
+        pb->bmp->setTemperatureOversampling(BME680_OS_8X);
+        pb->bmp->setHumidityOversampling(BME680_OS_2X);
+        pb->bmp->setPressureOversampling(BME680_OS_4X);
+        pb->bmp->setIIRFilterSize(BME680_FILTER_SIZE_3);
+        pb->bmp->setGasHeater(320, 150);
         LOG_DEBUG("Initialized BME680 on Purpleboard");
     }
 

@@ -36,6 +36,17 @@ include(Adafruit_TSL2561)
 # Include all our sdk modules
 add_subdirectory(src)
 
+# Test target that compiles all excluded-from-all libraries
+add_custom_target(test ALL
+    DEPENDS
+        leos_log
+        leos_mcp251xfd
+        leos_purpleboard
+        leos_cyphal_node
+        leos_cyphal_transport
+        leos_cyphal_transport_mcp251xfd
+)
+
 
 # cyphal_generate_types(
 #     TARGET TEMPLATE_PICO

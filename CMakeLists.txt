@@ -28,10 +28,10 @@ include(libcanard)
 include(o1heap)
 include(nunavut)
 include(Pico_BusIO)
-include(Adafruit_BMP3XX)
+include(Adafruit_BME680)
 include(Adafruit_LTR390)
 include(Adafruit_PM25AQI)
-include(Adafruit_TSL2561)
+include(Adafruit_TSL2591_Library)
 
 # Include all our sdk modules
 add_subdirectory(src)

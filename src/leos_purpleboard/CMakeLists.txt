@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.15)
 
 
-add_library(leos_purpleboard EXCLUDE_FROM_ALL purpleboard.cpp)
+add_library(leos_purpleboard  purpleboard.cpp)
 
 target_include_directories(leos_purpleboard
     PUBLIC

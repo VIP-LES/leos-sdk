@@ -32,6 +32,7 @@ include(Adafruit_BMP3XX)
 include(Adafruit_LTR390)
 include(Adafruit_PM25AQI)
 include(Adafruit_TSL2561)
+include(sx1262)
 
 # Include all our sdk modules
 add_subdirectory(src)
@@ -48,5 +49,3 @@ add_subdirectory(src)
 #     DSDL_DIR ${PROJECT_SOURCE_DIR}/external/public_regulated_data_types/reg
 #     DSDL_LOOKUP_DIRS ${PROJECT_SOURCE_DIR}/external/public_regulated_data_types/uavcan
 # )
-
-

@@ -29,8 +29,9 @@ include(o1heap)
 include(nunavut)
 include(Pico_BusIO)
 include(Adafruit_LTR390)
+include(Adafruit_BME680)
 include(Adafruit_PM25AQI)
-include(Adafruit_TSL2591_Library)
+include(Adafruit_TSL2591)
 
 # Include all our sdk modules
 add_subdirectory(src)

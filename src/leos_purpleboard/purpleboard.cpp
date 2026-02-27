@@ -15,8 +15,7 @@ struct leos_purpleboard {
     Adafruit_BME680* bmp;
     Adafruit_LTR390* ltr;
     Adafruit_PM25AQI* aqi;
-    Adafruit_TSL2561_library* tsl;
-
+    Adafruit_TSL2591* tsl;
 };
 leos_purpleboard_result_t leos_purpleboard_init(i2c_inst_t *i2c, uint sda, uint scl, leos_purpleboard_t **out_pb) {
     leos_purpleboard_result_t result = PB_OK;
@@ -27,12 +26,12 @@ leos_purpleboard_result_t leos_purpleboard_init(i2c_inst_t *i2c, uint sda, uint 
     pb->scl = scl;
     pb->wire = new TwoWire(i2c, sda, scl);
 
-    pb->bmp = new Adafruit_BME680();
+    pb->bmp = new Adafruit_BME680(pb->wire);
     pb->ltr = new Adafruit_LTR390();
     pb->aqi = new Adafruit_PM25AQI();
-    pb->tsl = new  Adafruit_TSL2591_library();
+    pb->tsl = new  Adafruit_TSL2591();
 
-    if (!pb->bmp->begin(pb->wire)){
+    if (!pb->bmp->begin()){
         LOG_ERROR("Failed to initialize BME680 on Purpleboard");
         result = PB_SENSOR_NO_DETECT;
     } else{
@@ -49,14 +48,14 @@ leos_purpleboard_result_t leos_purpleboard_init(i2c_inst_t *i2c, uint sda, uint 
         LOG_ERROR("Failed to initialize LTR390 on Purpleboard");
         result = PB_SENSOR_NO_DETECT;
     } else {
-        pb->ltr.setMode(LTR390_MODE_UVS);
-        pb->ltr.setResolution(LTR390_RESOLUTION_16BIT);
-        pb->ltr.setGain(LTR390_GAIN_1);
+        pb->ltr->setMode(LTR390_MODE_UVS);
+        pb->ltr->setResolution(LTR390_RESOLUTION_16BIT);
+        pb->ltr->setGain(LTR390_GAIN_1);
         LOG_DEBUG("Initialized LTR390 on Purpleboard");
     }
     
 
-    aqi.begin_I2C(); // ??
+    pb->aqi->begin_I2C();
 
     if (!pb->aqi->begin_I2C(pb->wire)) {
         LOG_ERROR("Failed to initialize PM25AQI on Purpleboard");
@@ -87,23 +86,23 @@ leos_purpleboard_result_t leos_purpleboard_read(leos_purpleboard_t* pb, leos_pur
     }
     leos_purpleboard_result_t result = PB_OK;
 
-    if (!pb->bmp.performReading()) {
+    if (!pb->bmp->performReading()) {
         LOG_WARNING("Failed to read BMP388 values");
         result = PB_SENSOR_READ_DEGRADED;
         sensor_data->temperature_c = -1.0;
         sensor_data->pressure_mb = -1.0;
     } else {
-        sensor_data->temperature_c = pb->bmp.temperature;
-        sensor_data->pressure_mb = pb->bmp.pressure / 100.0;
+        sensor_data->temperature_c = pb->bmp->temperature;
+        sensor_data->pressure_mb = pb->bmp->pressure / 100.0;
     }
 
     //  I have no way to validate this!!
-    sensor_data->uvs = pb->ltr.readUVS();
+    sensor_data->ltr390_uvs = pb->ltr->readUVS();
     // Data may be stale, if desired, poll the ltr until new data is available.
 
 
     PM25_AQI_Data aqi_data;
-    if (!pb->aqi.read(&aqi_data)) {
+    if (!pb->aqi->read(&aqi_data)) {
         LOG_WARNING("Failed to read Purpleboard air sensor");
         result = PB_SENSOR_READ_DEGRADED;
         sensor_data->pm10_env = -1;
@@ -123,9 +122,9 @@ leos_purpleboard_result_t leos_purpleboard_read(leos_purpleboard_t* pb, leos_pur
     if(!pb->tsl->getEvent(&event) || !event.light) {
         LOG_WARNING("Failed to read TSL2651 light value");
         result = PB_SENSOR_READ_DEGRADED;
-        sensor_data->light_lux = -1;
+        sensor_data->lux = -1;
     } else {
-        sensor_data->light_lux = event.light;
+        sensor_data->lux = event.light;
     }
 
     return result;
@@ -133,7 +132,7 @@ leos_purpleboard_result_t leos_purpleboard_read(leos_purpleboard_t* pb, leos_pur
 
 
 void leos_purpleboard_deinit(leos_purpleboard_t *pb) {
-    pb->ltr.enable(false);
+    pb->ltr->enable(false);
     delete pb->tsl;
     delete pb->wire;
     delete pb;

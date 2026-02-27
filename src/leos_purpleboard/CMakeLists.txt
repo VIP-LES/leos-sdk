@@ -13,6 +13,7 @@ target_link_libraries(leos_purpleboard
     leos_log
     Adafruit_LTR390
     Adafruit_PM25AQI
+    Adafruit_BME680
     Adafruit_TSL2591
 )
 target_link_libraries(leos_purpleboard

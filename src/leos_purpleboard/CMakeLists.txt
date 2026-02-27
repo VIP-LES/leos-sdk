@@ -11,7 +11,6 @@ target_include_directories(leos_purpleboard
 target_link_libraries(leos_purpleboard
     PRIVATE
     leos_log
-    Adafruit_BME680
     Adafruit_LTR390
     Adafruit_PM25AQI
     Adafruit_TSL2591

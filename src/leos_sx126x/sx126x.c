@@ -272,7 +272,6 @@ static void leos_sx126x_latch_rx(leos_sx126x_ctx_t *ctx, uint8_t *buf, uint16_t 
     }
 
     ctx->rx_pending = true;
-    ctx->mode = LEOS_RADIO_MODE_STANDBY;
 }
 
 void leos_sx126x_receive_callback_impl(leos_sx126x_ctx_t *ctx, uint16_t type, uint8_t *buf, uint16_t len)
@@ -293,11 +292,17 @@ void leos_sx126x_receive_callback_impl(leos_sx126x_ctx_t *ctx, uint16_t type, ui
             break;
 
         case SX1262_IRQ_CRC_ERR:
-            ctx->mode = LEOS_RADIO_MODE_STANDBY;
+            if (ctx->mode == LEOS_RADIO_MODE_TX)
+            {
+                ctx->mode = LEOS_RADIO_MODE_STANDBY;
+            }
             break;
 
         case SX1262_IRQ_TIMEOUT:
-            ctx->mode = LEOS_RADIO_MODE_STANDBY;
+            if (ctx->mode == LEOS_RADIO_MODE_TX)
+            {
+                ctx->mode = LEOS_RADIO_MODE_STANDBY;
+            }
             break;
 
         default:

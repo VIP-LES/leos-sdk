@@ -609,6 +609,9 @@ leos_radio_status_t leos_sx126x_standby(leos_radio_t radio)
 
 /**
  * @brief Flag deferred IRQ work for the selected radio.
+ *
+ * Only latch the interrupt here. Packet data remains in the SX126x until
+ * leos_sx126x_process_irq() runs in non-ISR context and drains it over SPI.
  */
 void leos_sx126x_handle_dio1_irq(leos_radio_t radio)
 {
@@ -623,6 +626,10 @@ void leos_sx126x_handle_dio1_irq(leos_radio_t radio)
 
 /**
  * @brief Process deferred IRQ work outside ISR context.
+ *
+ * This must run promptly after DIO1 asserts. Delayed polling here can lose
+ * packets because the radio does not provide a multi-packet RX queue for
+ * unread frames.
  */
 leos_radio_status_t leos_sx126x_process_irq(leos_radio_t radio)
 {

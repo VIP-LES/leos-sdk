@@ -7,63 +7,16 @@
 #include "hardware/spi.h"
 #include "pico/stdlib.h"
 
-#ifndef LEOS_SX126X_SPI_PORT
-#define LEOS_SX126X_SPI_PORT spi1
-#endif
-
-#ifndef LEOS_SX126X_SPI_BAUD_HZ
-#define LEOS_SX126X_SPI_BAUD_HZ 4000000u
-#endif
-
-#ifndef LEOS_SX126X_PIN_SCK
-#define LEOS_SX126X_PIN_SCK 10u
-#endif
-
-#ifndef LEOS_SX126X_PIN_MOSI
-#define LEOS_SX126X_PIN_MOSI 11u
-#endif
-
-#ifndef LEOS_SX126X_PIN_MISO
-#define LEOS_SX126X_PIN_MISO 12u
-#endif
-
-#ifndef LEOS_SX1262_PIN_NSS
-#define LEOS_SX1262_PIN_NSS 13u
-#endif
-
-#ifndef LEOS_SX1262_PIN_BUSY
-#define LEOS_SX1262_PIN_BUSY 14u
-#endif
-
-#ifndef LEOS_SX1262_PIN_RESET
-#define LEOS_SX1262_PIN_RESET 15u
-#endif
-
-#ifndef LEOS_SX1262_PIN_DIO1
-#define LEOS_SX1262_PIN_DIO1 16u
-#endif
-
-#ifndef LEOS_SX1268_PIN_NSS
-#define LEOS_SX1268_PIN_NSS 17u
-#endif
-
-#ifndef LEOS_SX1268_PIN_BUSY
-#define LEOS_SX1268_PIN_BUSY 18u
-#endif
-
-#ifndef LEOS_SX1268_PIN_RESET
-#define LEOS_SX1268_PIN_RESET 19u
-#endif
-
-#ifndef LEOS_SX1268_PIN_DIO1
-#define LEOS_SX1268_PIN_DIO1 20u
-#endif
-
 #ifndef LEOS_SX126X_ENABLE_DEBUG
 #define LEOS_SX126X_ENABLE_DEBUG 0
 #endif
 
 static bool g_spi_initialized = false;
+static spi_inst_t *g_spi_port = NULL;
+static uint32_t g_spi_baud_hz = 0u;
+static uint32_t g_spi_pin_sck = 0u;
+static uint32_t g_spi_pin_mosi = 0u;
+static uint32_t g_spi_pin_miso = 0u;
 
 static uint8_t leos_sx126x_spi_hw_init(void)
 {
@@ -72,12 +25,17 @@ static uint8_t leos_sx126x_spi_hw_init(void)
         return 0;
     }
 
-    spi_init(LEOS_SX126X_SPI_PORT, LEOS_SX126X_SPI_BAUD_HZ);
-    spi_set_format(LEOS_SX126X_SPI_PORT, 8u, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
+    if (g_spi_port == NULL)
+    {
+        return 1;
+    }
 
-    gpio_set_function(LEOS_SX126X_PIN_SCK, GPIO_FUNC_SPI);
-    gpio_set_function(LEOS_SX126X_PIN_MOSI, GPIO_FUNC_SPI);
-    gpio_set_function(LEOS_SX126X_PIN_MISO, GPIO_FUNC_SPI);
+    spi_init(g_spi_port, g_spi_baud_hz);
+    spi_set_format(g_spi_port, 8u, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
+
+    gpio_set_function(g_spi_pin_sck, GPIO_FUNC_SPI);
+    gpio_set_function(g_spi_pin_mosi, GPIO_FUNC_SPI);
+    gpio_set_function(g_spi_pin_miso, GPIO_FUNC_SPI);
 
     g_spi_initialized = true;
     return 0;
@@ -90,35 +48,35 @@ static uint8_t leos_sx126x_spi_hw_deinit(void)
 
 static uint8_t leos_sx126x_gpio_init_ctx(leos_sx126x_ctx_t *ctx)
 {
-    gpio_init(ctx->pins.nss);
-    gpio_set_dir(ctx->pins.nss, GPIO_OUT);
-    gpio_put(ctx->pins.nss, 1);
+    gpio_init(ctx->hw_config.pin_nss);
+    gpio_set_dir(ctx->hw_config.pin_nss, GPIO_OUT);
+    gpio_put(ctx->hw_config.pin_nss, 1);
 
-    gpio_init(ctx->pins.reset);
-    gpio_set_dir(ctx->pins.reset, GPIO_OUT);
-    gpio_put(ctx->pins.reset, 1);
+    gpio_init(ctx->hw_config.pin_reset);
+    gpio_set_dir(ctx->hw_config.pin_reset, GPIO_OUT);
+    gpio_put(ctx->hw_config.pin_reset, 1);
 
-    gpio_init(ctx->pins.busy);
-    gpio_set_dir(ctx->pins.busy, GPIO_IN);
+    gpio_init(ctx->hw_config.pin_busy);
+    gpio_set_dir(ctx->hw_config.pin_busy, GPIO_IN);
 
-    gpio_init(ctx->pins.dio1);
-    gpio_set_dir(ctx->pins.dio1, GPIO_IN);
+    gpio_init(ctx->hw_config.pin_dio1);
+    gpio_set_dir(ctx->hw_config.pin_dio1, GPIO_IN);
 
     return 0;
 }
 
 static uint8_t leos_sx126x_gpio_deinit_ctx(leos_sx126x_ctx_t *ctx)
 {
-    gpio_deinit(ctx->pins.nss);
-    gpio_deinit(ctx->pins.reset);
-    gpio_deinit(ctx->pins.busy);
-    gpio_deinit(ctx->pins.dio1);
+    gpio_deinit(ctx->hw_config.pin_nss);
+    gpio_deinit(ctx->hw_config.pin_reset);
+    gpio_deinit(ctx->hw_config.pin_busy);
+    gpio_deinit(ctx->hw_config.pin_dio1);
     return 0;
 }
 
 static uint8_t leos_sx126x_reset_write_ctx(leos_sx126x_ctx_t *ctx, uint8_t value)
 {
-    gpio_put(ctx->pins.reset, value ? 1u : 0u);
+    gpio_put(ctx->hw_config.pin_reset, value ? 1u : 0u);
     return 0;
 }
 
@@ -129,7 +87,7 @@ static uint8_t leos_sx126x_busy_read_ctx(leos_sx126x_ctx_t *ctx, uint8_t *value)
         return 1;
     }
 
-    *value = gpio_get(ctx->pins.busy) ? 1u : 0u;
+    *value = gpio_get(ctx->hw_config.pin_busy) ? 1u : 0u;
     return 0;
 }
 
@@ -144,33 +102,43 @@ static uint8_t leos_sx126x_spi_write_read_ctx(leos_sx126x_ctx_t *ctx,
         return 1;
     }
 
-    gpio_put(ctx->pins.nss, 0);
+    gpio_put(ctx->hw_config.pin_nss, 0);
 
     if ((in_buf != NULL) && (in_len > 0u))
     {
-        if (spi_write_blocking(LEOS_SX126X_SPI_PORT, in_buf, in_len) < 0)
+        if (spi_write_blocking(g_spi_port, in_buf, in_len) < 0)
         {
-            gpio_put(ctx->pins.nss, 1);
+            gpio_put(ctx->hw_config.pin_nss, 1);
             return 1;
         }
     }
 
     if ((out_buf != NULL) && (out_len > 0u))
     {
-        if (spi_read_blocking(LEOS_SX126X_SPI_PORT, 0x00, out_buf, out_len) < 0)
+        if (spi_read_blocking(g_spi_port, 0x00, out_buf, out_len) < 0)
         {
-            gpio_put(ctx->pins.nss, 1);
+            gpio_put(ctx->hw_config.pin_nss, 1);
             return 1;
         }
     }
 
-    gpio_put(ctx->pins.nss, 1);
+    gpio_put(ctx->hw_config.pin_nss, 1);
     return 0;
 }
 
 static void leos_sx126x_delay_ms(uint32_t ms)
 {
     sleep_ms(ms);
+}
+
+uint64_t leos_sx126x_platform_now_ms(void)
+{
+    return (uint64_t)to_ms_since_boot(get_absolute_time());
+}
+
+void leos_sx126x_platform_idle(void)
+{
+    tight_loop_contents();
 }
 
 static void leos_sx126x_debug_print(const char *const fmt, ...)
@@ -222,14 +190,14 @@ static void leos_sx1268_receive_callback(uint16_t type, uint8_t *buf, uint16_t l
 void leos_sx126x_link_handle(leos_sx126x_ctx_t *ctx)
 {
     DRIVER_SX1262_LINK_INIT(&ctx->handle, sx1262_handle_t);
+    g_spi_port = (spi_inst_t *)ctx->hw_config.platform_spi;
+    g_spi_baud_hz = ctx->hw_config.spi_baud_hz;
+    g_spi_pin_sck = ctx->hw_config.pin_sck;
+    g_spi_pin_mosi = ctx->hw_config.pin_mosi;
+    g_spi_pin_miso = ctx->hw_config.pin_miso;
 
     if (ctx->radio == LEOS_RADIO_SX1262)
     {
-        ctx->pins.nss = LEOS_SX1262_PIN_NSS;
-        ctx->pins.busy = LEOS_SX1262_PIN_BUSY;
-        ctx->pins.reset = LEOS_SX1262_PIN_RESET;
-        ctx->pins.dio1 = LEOS_SX1262_PIN_DIO1;
-
         DRIVER_SX1262_LINK_SPI_INIT(&ctx->handle, leos_sx1262_spi_init);
         DRIVER_SX1262_LINK_SPI_DEINIT(&ctx->handle, leos_sx1262_spi_deinit);
         DRIVER_SX1262_LINK_SPI_WRITE_READ(&ctx->handle, leos_sx1262_spi_write_read);
@@ -245,11 +213,6 @@ void leos_sx126x_link_handle(leos_sx126x_ctx_t *ctx)
     }
     else
     {
-        ctx->pins.nss = LEOS_SX1268_PIN_NSS;
-        ctx->pins.busy = LEOS_SX1268_PIN_BUSY;
-        ctx->pins.reset = LEOS_SX1268_PIN_RESET;
-        ctx->pins.dio1 = LEOS_SX1268_PIN_DIO1;
-
         DRIVER_SX1262_LINK_SPI_INIT(&ctx->handle, leos_sx1268_spi_init);
         DRIVER_SX1262_LINK_SPI_DEINIT(&ctx->handle, leos_sx1268_spi_deinit);
         DRIVER_SX1262_LINK_SPI_WRITE_READ(&ctx->handle, leos_sx1268_spi_write_read);

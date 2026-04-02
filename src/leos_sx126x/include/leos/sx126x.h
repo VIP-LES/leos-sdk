@@ -70,6 +70,25 @@ typedef enum {
 } leos_radio_mode_t;
 
 /**
+ * @brief Hardware wiring/configuration for one SX126x instance.
+ *
+ * platform_spi is intentionally opaque so application code can pass the
+ * platform-native SPI handle/device descriptor without the SDK depending
+ * on Pico or Linux-specific public types.
+ */
+typedef struct {
+    void *platform_spi;   /**< Opaque platform-specific SPI handle/descriptor. */
+    uint32_t spi_baud_hz; /**< Shared SPI bus speed in Hz. */
+    uint32_t pin_sck;     /**< Shared SPI SCK pin/line. */
+    uint32_t pin_mosi;    /**< Shared SPI MOSI pin/line. */
+    uint32_t pin_miso;    /**< Shared SPI MISO pin/line. */
+    uint32_t pin_nss;     /**< Chip select pin/line for this radio. */
+    uint32_t pin_busy;    /**< BUSY pin/line for this radio. */
+    uint32_t pin_reset;   /**< RESET pin/line for this radio. */
+    uint32_t pin_dio1;    /**< DIO1 pin/line for this radio. */
+} leos_radio_hw_config_t;
+
+/**
  * @brief Basic SX126x LoRa configuration for one radio instance.
  */
 typedef struct {
@@ -103,6 +122,7 @@ void leos_sx126x_get_default_config(leos_radio_t radio,
  * @brief Initialize the selected radio and apply configuration.
  */
 leos_radio_status_t leos_sx126x_init(leos_radio_t radio,
+                                     const leos_radio_hw_config_t *hw_cfg,
                                      const leos_radio_config_t *cfg);
 
 /**

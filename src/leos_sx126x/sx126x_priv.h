@@ -25,17 +25,9 @@
 
 typedef struct
 {
-    uint nss;
-    uint busy;
-    uint reset;
-    uint dio1;
-} leos_sx126x_pins_t;
-
-typedef struct
-{
     leos_radio_t radio;
     sx1262_handle_t handle;
-    leos_sx126x_pins_t pins;
+    leos_radio_hw_config_t hw_config;
     leos_radio_config_t config;
     leos_radio_mode_t mode;
     bool initialized;
@@ -54,3 +46,5 @@ leos_sx126x_ctx_t *leos_sx126x_ctx(leos_radio_t radio);
 leos_radio_status_t leos_sx126x_map_status(uint8_t rc);
 void leos_sx126x_receive_callback_impl(leos_sx126x_ctx_t *ctx, uint16_t type, uint8_t *buf, uint16_t len);
 void leos_sx126x_link_handle(leos_sx126x_ctx_t *ctx);
+uint64_t leos_sx126x_platform_now_ms(void);
+void leos_sx126x_platform_idle(void);

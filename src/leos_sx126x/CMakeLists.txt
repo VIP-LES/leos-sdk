@@ -1,11 +1,21 @@
 # libdriver SX1262 HAL
-# Adapts the external/sx1262 library to the Raspberry Pi Pico platform
+# Adapts the external/sx1262 library to the selected platform port.
 
 cmake_minimum_required(VERSION 3.15)
 
 include(sx1262)
 
-add_library(leos_sx126x EXCLUDE_FROM_ALL sx126x.c platform.c)
+set(LEOS_SX126X_PORT "pico" CACHE STRING "Platform port for leos_sx126x (pico or linux)")
+set_property(CACHE LEOS_SX126X_PORT PROPERTY STRINGS pico linux)
+
+set(LEOS_SX126X_PORT_SRC sx126x_port_pico.c)
+if(LEOS_SX126X_PORT STREQUAL "linux")
+    set(LEOS_SX126X_PORT_SRC sx126x_port_linux.c)
+elseif(NOT LEOS_SX126X_PORT STREQUAL "pico")
+    message(FATAL_ERROR "Unsupported LEOS_SX126X_PORT='${LEOS_SX126X_PORT}'. Expected 'pico' or 'linux'.")
+endif()
+
+add_library(leos_sx126x EXCLUDE_FROM_ALL sx126x.c ${LEOS_SX126X_PORT_SRC})
 
 target_include_directories(leos_sx126x
     PRIVATE
@@ -18,13 +28,22 @@ target_include_directories(leos_sx126x
 
 target_link_libraries(leos_sx126x
     PUBLIC
-    hardware_spi
     sx1262
 )
 target_link_libraries(leos_sx126x
     PRIVATE
     leos_log
-    pico_time
-    pico_stdlib
-    hardware_sync
 )
+
+if(LEOS_SX126X_PORT STREQUAL "pico")
+    target_link_libraries(leos_sx126x
+        PUBLIC
+        hardware_spi
+    )
+    target_link_libraries(leos_sx126x
+        PRIVATE
+        pico_time
+        pico_stdlib
+        hardware_sync
+    )
+endif()

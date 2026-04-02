@@ -2,8 +2,6 @@
 
 #include <string.h>
 
-#include "pico/stdlib.h"
-
 leos_sx126x_ctx_t g_sx1262 = {
     .radio = LEOS_RADIO_SX1262,
     .mode = LEOS_RADIO_MODE_UNINIT,
@@ -347,13 +345,15 @@ void leos_sx126x_get_default_config(leos_radio_t radio, leos_radio_config_t *cfg
 /**
  * @brief Initialize the selected radio and apply configuration.
  */
-leos_radio_status_t leos_sx126x_init(leos_radio_t radio, const leos_radio_config_t *cfg)
+leos_radio_status_t leos_sx126x_init(leos_radio_t radio,
+                                     const leos_radio_hw_config_t *hw_cfg,
+                                     const leos_radio_config_t *cfg)
 {
     leos_sx126x_ctx_t *ctx;
     leos_radio_status_t status;
     uint8_t rc;
 
-    if (cfg == NULL)
+    if ((hw_cfg == NULL) || (cfg == NULL))
     {
         return LEOS_RADIO_ERR_ARG;
     }
@@ -370,6 +370,7 @@ leos_radio_status_t leos_sx126x_init(leos_radio_t radio, const leos_radio_config
     }
 
     memset(ctx->rx_buf, 0, sizeof(ctx->rx_buf));
+    ctx->hw_config = *hw_cfg;
     ctx->config = *cfg;
     ctx->irq_pending = false;
     ctx->rx_pending = false;
@@ -411,7 +412,7 @@ leos_radio_status_t leos_sx126x_send(leos_radio_t radio, const uint8_t *data, si
 {
     leos_sx126x_ctx_t *ctx;
     leos_radio_status_t status;
-    absolute_time_t deadline;
+    const uint64_t start_ms = leos_sx126x_platform_now_ms();
     uint8_t rc;
 
     if ((data == NULL) || (len == 0u) || (len > LEOS_SX126X_MAX_PAYLOAD_LEN))
@@ -460,8 +461,7 @@ leos_radio_status_t leos_sx126x_send(leos_radio_t radio, const uint8_t *data, si
         return status;
     }
 
-    deadline = make_timeout_time_ms(LEOS_SX126X_TX_TIMEOUT_MS);
-    while (!time_reached(deadline))
+    while ((leos_sx126x_platform_now_ms() - start_ms) < LEOS_SX126X_TX_TIMEOUT_MS)
     {
         if (ctx->irq_pending)
         {
@@ -485,7 +485,7 @@ leos_radio_status_t leos_sx126x_send(leos_radio_t radio, const uint8_t *data, si
             return LEOS_RADIO_ERR_TIMEOUT;
         }
 
-        tight_loop_contents();
+        leos_sx126x_platform_idle();
     }
 
     ctx->mode = LEOS_RADIO_MODE_STANDBY;

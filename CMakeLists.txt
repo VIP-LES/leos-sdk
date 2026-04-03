@@ -32,7 +32,6 @@ include(Adafruit_BMP3XX)
 include(Adafruit_LTR390)
 include(Adafruit_PM25AQI)
 include(Adafruit_TSL2561)
-include(sx1262)
 
 # Include all our sdk modules
 add_subdirectory(src)

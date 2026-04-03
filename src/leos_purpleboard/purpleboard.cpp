@@ -5,6 +5,9 @@
 #include "Adafruit_PM25AQI.h"
 #include "Adafruit_TSL2591.h"
 
+namespace {
+constexpr float kDefaultSeaLevelPressureHpa = 1013.25f; // Default sea-level reference for derived altitude; can be made launch-day configurable later.
+}
 
 struct leos_purpleboard {
     i2c_inst_t *i2c_block;
@@ -12,7 +15,7 @@ struct leos_purpleboard {
     uint scl;
     TwoWire* wire;
 
-    Adafruit_BME680* bmp;
+    Adafruit_BME680* bme;
     Adafruit_LTR390* ltr;
     Adafruit_PM25AQI* aqi;
     Adafruit_TSL2591* tsl;
@@ -26,20 +29,20 @@ leos_purpleboard_result_t leos_purpleboard_init(i2c_inst_t *i2c, uint sda, uint 
     pb->scl = scl;
     pb->wire = new TwoWire(i2c, sda, scl);
 
-    pb->bmp = new Adafruit_BME680(pb->wire);
+    pb->bme = new Adafruit_BME680(pb->wire);
     pb->ltr = new Adafruit_LTR390();
     pb->aqi = new Adafruit_PM25AQI();
     pb->tsl = new  Adafruit_TSL2591();
 
-    if (!pb->bmp->begin()){
+    if (!pb->bme->begin()){
         LOG_ERROR("Failed to initialize BME680 on Purpleboard");
         result = PB_SENSOR_NO_DETECT;
     } else{
-        pb->bmp->setTemperatureOversampling(BME680_OS_8X);
-        pb->bmp->setHumidityOversampling(BME680_OS_2X);
-        pb->bmp->setPressureOversampling(BME680_OS_4X);
-        pb->bmp->setIIRFilterSize(BME680_FILTER_SIZE_3);
-        pb->bmp->setGasHeater(320, 150);
+        pb->bme->setTemperatureOversampling(BME680_OS_8X);
+        pb->bme->setHumidityOversampling(BME680_OS_2X);
+        pb->bme->setPressureOversampling(BME680_OS_4X);
+        pb->bme->setIIRFilterSize(BME680_FILTER_SIZE_3);
+        pb->bme->setGasHeater(320, 150);
         LOG_DEBUG("Initialized BME680 on Purpleboard");
     }
 
@@ -53,9 +56,6 @@ leos_purpleboard_result_t leos_purpleboard_init(i2c_inst_t *i2c, uint sda, uint 
         pb->ltr->setGain(LTR390_GAIN_1);
         LOG_DEBUG("Initialized LTR390 on Purpleboard");
     }
-    
-
-    pb->aqi->begin_I2C();
 
     if (!pb->aqi->begin_I2C(pb->wire)) {
         LOG_ERROR("Failed to initialize PM25AQI on Purpleboard");
@@ -86,45 +86,68 @@ leos_purpleboard_result_t leos_purpleboard_read(leos_purpleboard_t* pb, leos_pur
     }
     leos_purpleboard_result_t result = PB_OK;
 
-    if (!pb->bmp->performReading()) {
-        LOG_WARNING("Failed to read BMP388 values");
+    if (!pb->bme->performReading()) {
+        LOG_WARNING("Failed to read BME680 values");
         result = PB_SENSOR_READ_DEGRADED;
-        sensor_data->temperature_c = -1.0;
-        sensor_data->pressure_mb = -1.0;
+        sensor_data->temperature_c = 0.0f;
+        sensor_data->pressure_mb = 0.0f;
+        sensor_data->humidity = 0.0f;
+        sensor_data->altitude_m = 0.0f;
+        sensor_data->gas_resistance = 0;
     } else {
-        sensor_data->temperature_c = pb->bmp->temperature;
-        sensor_data->pressure_mb = pb->bmp->pressure / 100.0;
+        sensor_data->temperature_c = pb->bme->temperature;
+        sensor_data->pressure_mb = pb->bme->pressure / 100.0f;
+        sensor_data->humidity = pb->bme->humidity;
+        sensor_data->altitude_m = pb->bme->readAltitude(kDefaultSeaLevelPressureHpa);
+        sensor_data->gas_resistance = pb->bme->gas_resistance;
     }
 
-    //  I have no way to validate this!!
+    // The LTR390 read API returns the raw UV value directly, so callers should pair this with sensor-level validity.
     sensor_data->ltr390_uvs = pb->ltr->readUVS();
-    // Data may be stale, if desired, poll the ltr until new data is available.
-
 
     PM25_AQI_Data aqi_data;
     if (!pb->aqi->read(&aqi_data)) {
         LOG_WARNING("Failed to read Purpleboard air sensor");
         result = PB_SENSOR_READ_DEGRADED;
-        sensor_data->pm10_env = -1;
-        sensor_data->pm25_env = -1;
-        sensor_data->pm100_env = -1;
-        sensor_data->aqi_pm25_us = -1;
-        sensor_data->aqi_pm100_us = -1;
+        sensor_data->pm10_env = 0;
+        sensor_data->pm25_env = 0;
+        sensor_data->pm100_env = 0;
+        sensor_data->aqi_pm25_us = 0;
+        sensor_data->aqi_pm100_us = 0;
+        sensor_data->particles_03um = 0;
+        sensor_data->particles_05um = 0;
+        sensor_data->particles_10um = 0;
+        sensor_data->particles_25um = 0;
+        sensor_data->particles_50um = 0;
+        sensor_data->particles_100um = 0;
     } else {
         sensor_data->pm10_env = aqi_data.pm10_env;
         sensor_data->pm25_env = aqi_data.pm25_env;
         sensor_data->pm100_env = aqi_data.pm100_env;
         sensor_data->aqi_pm25_us = aqi_data.aqi_pm25_us;
         sensor_data->aqi_pm100_us = aqi_data.aqi_pm100_us;
+        sensor_data->particles_03um = aqi_data.particles_03um;
+        sensor_data->particles_05um = aqi_data.particles_05um;
+        sensor_data->particles_10um = aqi_data.particles_10um;
+        sensor_data->particles_25um = aqi_data.particles_25um;
+        sensor_data->particles_50um = aqi_data.particles_50um;
+        sensor_data->particles_100um = aqi_data.particles_100um;
     }
 
     sensors_event_t event;
     if(!pb->tsl->getEvent(&event) || !event.light) {
-        LOG_WARNING("Failed to read TSL2651 light value");
+        LOG_WARNING("Failed to read TSL2591 light value");
         result = PB_SENSOR_READ_DEGRADED;
-        sensor_data->lux = -1;
+        sensor_data->lux = 0.0f;
+        sensor_data->raw_visible = 0;
+        sensor_data->raw_infrared = 0;
+        sensor_data->raw_full_spectrum = 0;
     } else {
         sensor_data->lux = event.light;
+        const uint32_t full_spectrum = pb->tsl->getFullLuminosity();
+        sensor_data->raw_full_spectrum = full_spectrum;
+        sensor_data->raw_infrared = static_cast<uint16_t>(full_spectrum >> 16);
+        sensor_data->raw_visible = static_cast<uint16_t>(full_spectrum & 0xFFFF);
     }
 
     return result;
@@ -132,7 +155,13 @@ leos_purpleboard_result_t leos_purpleboard_read(leos_purpleboard_t* pb, leos_pur
 
 
 void leos_purpleboard_deinit(leos_purpleboard_t *pb) {
+    if (pb == NULL) {
+        return;
+    }
     pb->ltr->enable(false);
+    delete pb->bme;
+    delete pb->ltr;
+    delete pb->aqi;
     delete pb->tsl;
     delete pb->wire;
     delete pb;

@@ -21,18 +21,27 @@ extern "C"
         float temperature_c;
         float pressure_mb;
         float humidity; // BME680 Values
-        float altitude_hpa;
-        uint32_t gas_resistence;
+        float altitude_m;
+        uint32_t gas_resistance;
 
         float lux; // TSL2591
+        uint16_t raw_visible;
+        uint16_t raw_infrared;
+        uint32_t raw_full_spectrum;
 
         uint32_t ltr390_uvs; // LTR390
 
-        uint16_t pm10_env;
-        uint16_t pm25_env;
-        uint16_t pm100_env;
-        uint16_t aqi_pm25_us;
-        uint16_t aqi_pm100_us; // PMSA300I
+        uint32_t pm10_env;
+        uint32_t pm25_env;
+        uint32_t pm100_env;
+        uint32_t aqi_pm25_us;
+        uint32_t aqi_pm100_us;
+        uint32_t particles_03um;
+        uint32_t particles_05um;
+        uint32_t particles_10um;
+        uint32_t particles_25um;
+        uint32_t particles_50um;
+        uint32_t particles_100um; // PMSA003I
     } leos_purpleboard_readings_t;
 
     // The state struct managing the purpleboard classes

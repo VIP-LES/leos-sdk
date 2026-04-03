@@ -11,10 +11,10 @@ target_include_directories(leos_purpleboard
 target_link_libraries(leos_purpleboard
     PRIVATE
     leos_log
-    Adafruit_BMP3XX
     Adafruit_LTR390
     Adafruit_PM25AQI
-    Adafruit_TSL2561
+    Adafruit_BME680
+    Adafruit_TSL2591
 )
 target_link_libraries(leos_purpleboard
     PUBLIC

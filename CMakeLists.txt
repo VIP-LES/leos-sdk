@@ -28,13 +28,24 @@ include(libcanard)
 include(o1heap)
 include(nunavut)
 include(Pico_BusIO)
-include(Adafruit_BMP3XX)
 include(Adafruit_LTR390)
+include(Adafruit_BME680)
 include(Adafruit_PM25AQI)
-include(Adafruit_TSL2561)
+include(Adafruit_TSL2591)
 
 # Include all our sdk modules
 add_subdirectory(src)
+
+# Test target that compiles all excluded-from-all libraries
+add_custom_target(test ALL
+    DEPENDS
+        leos_log
+        leos_mcp251xfd
+        leos_purpleboard
+        leos_cyphal_node
+        leos_cyphal_transport
+        leos_cyphal_transport_mcp251xfd
+)
 
 
 # cyphal_generate_types(

@@ -46,4 +46,10 @@ if(LEOS_SX126X_PORT STREQUAL "pico")
         pico_stdlib
         hardware_sync
     )
+elseif(LEOS_SX126X_PORT STREQUAL "linux")
+    find_library(GPIOD_LIBRARY gpiod REQUIRED)
+    target_link_libraries(leos_sx126x
+        PRIVATE
+        ${GPIOD_LIBRARY}
+    )
 endif()

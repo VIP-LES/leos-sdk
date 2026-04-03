@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdbool.h>
 #include <stdint.h>
 #include "hardware/i2c.h"
 
@@ -18,19 +19,23 @@ extern "C"
 
     typedef struct leos_purpleboard_readings
     {
+        bool bme680_valid;
         float temperature_c;
         float pressure_mb;
         float humidity; // BME680 Values
         float altitude_m;
         uint32_t gas_resistance;
 
+        bool tsl2591_valid;
         float lux; // TSL2591
         uint16_t raw_visible;
         uint16_t raw_infrared;
         uint32_t raw_full_spectrum;
 
+        bool ltr390_valid;
         uint32_t ltr390_uvs; // LTR390
 
+        bool pmsa003i_valid;
         uint32_t pm10_env;
         uint32_t pm25_env;
         uint32_t pm100_env;

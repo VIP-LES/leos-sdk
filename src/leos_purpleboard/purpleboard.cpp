@@ -80,7 +80,7 @@ leos_purpleboard_result_t leos_purpleboard_init(i2c_inst_t *i2c, uint sda, uint 
 }
 
 leos_purpleboard_result_t leos_purpleboard_read(leos_purpleboard_t* pb, leos_purpleboard_readings_t *sensor_data) {
-    if (pb == NULL) {
+    if ((pb == NULL) || (sensor_data == NULL)) {
         LOG_WARNING("leos_purpleboard_read was given a null ptr to pb");
         return PB_PARAMETER_ERROR;
     }
@@ -89,12 +89,14 @@ leos_purpleboard_result_t leos_purpleboard_read(leos_purpleboard_t* pb, leos_pur
     if (!pb->bme->performReading()) {
         LOG_WARNING("Failed to read BME680 values");
         result = PB_SENSOR_READ_DEGRADED;
+        sensor_data->bme680_valid = false;
         sensor_data->temperature_c = 0.0f;
         sensor_data->pressure_mb = 0.0f;
         sensor_data->humidity = 0.0f;
         sensor_data->altitude_m = 0.0f;
         sensor_data->gas_resistance = 0;
     } else {
+        sensor_data->bme680_valid = true;
         sensor_data->temperature_c = pb->bme->temperature;
         sensor_data->pressure_mb = pb->bme->pressure / 100.0f;
         sensor_data->humidity = pb->bme->humidity;
@@ -102,13 +104,20 @@ leos_purpleboard_result_t leos_purpleboard_read(leos_purpleboard_t* pb, leos_pur
         sensor_data->gas_resistance = pb->bme->gas_resistance;
     }
 
-    // The LTR390 read API returns the raw UV value directly, so callers should pair this with sensor-level validity.
-    sensor_data->ltr390_uvs = pb->ltr->readUVS();
+    // The LTR390 read API returns the raw UV value directly, so use data-ready plus mode as the cycle validity signal.
+    sensor_data->ltr390_valid = (pb->ltr->getMode() == LTR390_MODE_UVS) && pb->ltr->newDataAvailable();
+    if (!sensor_data->ltr390_valid) {
+        result = PB_SENSOR_READ_DEGRADED;
+        sensor_data->ltr390_uvs = 0;
+    } else {
+        sensor_data->ltr390_uvs = pb->ltr->readUVS();
+    }
 
     PM25_AQI_Data aqi_data;
     if (!pb->aqi->read(&aqi_data)) {
         LOG_WARNING("Failed to read Purpleboard air sensor");
         result = PB_SENSOR_READ_DEGRADED;
+        sensor_data->pmsa003i_valid = false;
         sensor_data->pm10_env = 0;
         sensor_data->pm25_env = 0;
         sensor_data->pm100_env = 0;
@@ -121,6 +130,7 @@ leos_purpleboard_result_t leos_purpleboard_read(leos_purpleboard_t* pb, leos_pur
         sensor_data->particles_50um = 0;
         sensor_data->particles_100um = 0;
     } else {
+        sensor_data->pmsa003i_valid = true;
         sensor_data->pm10_env = aqi_data.pm10_env;
         sensor_data->pm25_env = aqi_data.pm25_env;
         sensor_data->pm100_env = aqi_data.pm100_env;
@@ -135,14 +145,16 @@ leos_purpleboard_result_t leos_purpleboard_read(leos_purpleboard_t* pb, leos_pur
     }
 
     sensors_event_t event;
-    if(!pb->tsl->getEvent(&event) || !event.light) {
+    if(!pb->tsl->getEvent(&event)) {
         LOG_WARNING("Failed to read TSL2591 light value");
         result = PB_SENSOR_READ_DEGRADED;
+        sensor_data->tsl2591_valid = false;
         sensor_data->lux = 0.0f;
         sensor_data->raw_visible = 0;
         sensor_data->raw_infrared = 0;
         sensor_data->raw_full_spectrum = 0;
     } else {
+        sensor_data->tsl2591_valid = true;
         sensor_data->lux = event.light;
         const uint32_t full_spectrum = pb->tsl->getFullLuminosity();
         sensor_data->raw_full_spectrum = full_spectrum;

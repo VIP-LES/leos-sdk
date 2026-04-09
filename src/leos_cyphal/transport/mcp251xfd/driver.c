@@ -41,7 +41,7 @@ int8_t canard_mcp_tx_frame(void* const mcp251xfd, const CanardMicrosecond deadli
         return -result; // negate MCP error to make negative
 
     if (!(txq_status & MCP251XFD_TXQ_NOT_FULL)) {
-        LOG_WARNING("CAN TX FIFO is full, The last batch of older messages");
+        LOG_WARNING("CAN TX FIFO is full, Dropping the last batch of older messages");
         MCP251XFD_ResetTXQ(dev);
     }
     // There are arguments to be made that this should not be flushed immediately, and instead a flush should occur

@@ -3,7 +3,6 @@
 
 cmake_minimum_required(VERSION 3.15)
 
-include(sx1262)
 
 set(LEOS_SX126X_PORT "pico" CACHE STRING "Platform port for leos_sx126x (pico or linux)")
 set_property(CACHE LEOS_SX126X_PORT PROPERTY STRINGS pico linux)

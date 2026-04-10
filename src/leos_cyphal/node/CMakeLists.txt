@@ -34,6 +34,7 @@ target_link_libraries(leos_cyphal_node
 target_link_libraries(leos_cyphal_node
     PUBLIC
     leos_cyphal
+    leos_cyphal_transport
     libcanard
     pico_time
 )

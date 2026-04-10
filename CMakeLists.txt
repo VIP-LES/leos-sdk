@@ -41,7 +41,7 @@ include(ulog)
 add_subdirectory(src)
 
 # Test target that compiles all excluded-from-all libraries
-add_custom_target(test ALL
+add_custom_target(test
     DEPENDS
         leos_log
         leos_mcp251xfd

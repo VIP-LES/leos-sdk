@@ -7,3 +7,8 @@ add_library(Adafruit_TSL2591 EXCLUDE_FROM_ALL ${SRC_FILES})
 target_include_directories(Adafruit_TSL2591 PUBLIC ${Adafruit_TSL2591_DIR})
 
 target_link_libraries(Adafruit_TSL2591 PUBLIC pico_busio)
+
+# Ignore warning about deprecated bitwise operation
+target_compile_options(Adafruit_TSL2591 PRIVATE
+   $<$<COMPILE_LANGUAGE:CXX>:-Wno-deprecated-enum-enum-conversion>
+)

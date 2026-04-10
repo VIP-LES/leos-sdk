@@ -1,6 +1,7 @@
 
 add_subdirectory(leos_log)
 add_subdirectory(leos_mcp251xfd)
+add_subdirectory(leos_mcp342x)
 add_subdirectory(leos_cyphal)
 add_subdirectory(leos_purpleboard)
 add_subdirectory(leos_sx126x)

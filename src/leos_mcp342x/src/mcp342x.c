@@ -1,9 +1,12 @@
 #include "leos/mcp342x.h"
+#include "leos/log.h"
 #include "pico/stdlib.h"
 
 int mcp342x_init(mcp342x_dev_t *dev, i2c_inst_t *block, uint sda, uint scl, uint8_t addr) {
     if (dev == NULL) return -2;
     dev->i2c = block;
+    dev->config = 0;
+    i2c_init(block, 400000);
     gpio_set_function(sda, GPIO_FUNC_I2C);
     gpio_set_function(scl, GPIO_FUNC_I2C);
     gpio_pull_up(sda);
@@ -43,8 +46,11 @@ int mcp342x_read_raw(mcp342x_dev_t *dev, int32_t *value, bool *ready) {
     uint8_t buf[3];
 
     int ret = i2c_read_blocking(dev->i2c, dev->address, buf, 3, false);
-    if (ret < 0)
+    if (ret < 0) {
+        LOG_WARNING("No I2C ack for adc@%d", dev->address);
         return ret;
+    }
+    LOG_TRACE("adc@%d raw: %02X %02X %02X", dev->address, buf[0], buf[1], buf[2]);
 
     // RDY bit (bit 7 of config byte)
     if (ready) {

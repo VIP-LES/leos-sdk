@@ -27,14 +27,14 @@ typedef struct
 {
     struct gpiod_line_request *nss_req;
     struct gpiod_line_request *busy_req;
-    struct gpiod_line_request *reset_req;
     unsigned int nss_offset;
     unsigned int busy_offset;
-    unsigned int reset_offset;
     bool requested;
 } leos_sx126x_linux_gpio_t;
 
 static struct gpiod_chip *g_gpio_chip = NULL;
+static struct gpiod_line_request *g_reset_req = NULL;
+static unsigned int g_reset_offset = 0u;
 static leos_sx126x_linux_gpio_t g_sx1262_gpio = {0};
 static leos_sx126x_linux_gpio_t g_sx1268_gpio = {0};
 
@@ -70,6 +70,66 @@ static uint8_t leos_sx126x_gpio_chip_open(void)
 
     g_gpio_chip = gpiod_chip_open(LEOS_SX126X_LINUX_GPIO_CHIP);
     return (g_gpio_chip != NULL) ? 0u : 1u;
+}
+
+static uint8_t leos_sx126x_reset_gpio_ensure(unsigned int reset_offset)
+{
+    struct gpiod_line_settings *settings;
+    struct gpiod_line_config *line_cfg;
+    struct gpiod_request_config *req_cfg;
+
+    if (g_reset_req != NULL)
+    {
+        if (g_reset_offset != reset_offset)
+        {
+            fprintf(stderr,
+                    "leos_sx126x: shared reset line mismatch (existing=%u requested=%u)\n",
+                    g_reset_offset,
+                    reset_offset);
+            return 1;
+        }
+
+        return 0;
+    }
+
+    settings = gpiod_line_settings_new();
+    if (settings == NULL)
+    {
+        return 1;
+    }
+    gpiod_line_settings_set_direction(settings, GPIOD_LINE_DIRECTION_OUTPUT);
+    gpiod_line_settings_set_output_value(settings, GPIOD_LINE_VALUE_ACTIVE);
+
+    line_cfg = gpiod_line_config_new();
+    if (line_cfg == NULL)
+    {
+        gpiod_line_settings_free(settings);
+        return 1;
+    }
+    gpiod_line_config_add_line_settings(line_cfg, &reset_offset, 1, settings);
+    gpiod_line_settings_free(settings);
+
+    req_cfg = gpiod_request_config_new();
+    if (req_cfg == NULL)
+    {
+        gpiod_line_config_free(line_cfg);
+        return 1;
+    }
+    gpiod_request_config_set_consumer(req_cfg, "leos_sx126x_reset");
+
+    g_reset_req = gpiod_chip_request_lines(g_gpio_chip, req_cfg, line_cfg);
+    gpiod_request_config_free(req_cfg);
+    gpiod_line_config_free(line_cfg);
+    if (g_reset_req == NULL)
+    {
+        fprintf(stderr,
+                "leos_sx126x: failed to request shared reset line %u\n",
+                reset_offset);
+        return 1;
+    }
+
+    g_reset_offset = reset_offset;
+    return 0;
 }
 
 static uint8_t leos_sx126x_spi_hw_init(leos_sx126x_ctx_t *ctx)
@@ -132,7 +192,11 @@ static uint8_t leos_sx126x_gpio_init_ctx(leos_sx126x_ctx_t *ctx)
 
     gpio->nss_offset = (unsigned int)ctx->hw_config.pin_nss;
     gpio->busy_offset = (unsigned int)ctx->hw_config.pin_busy;
-    gpio->reset_offset = (unsigned int)ctx->hw_config.pin_reset;
+
+    if (leos_sx126x_reset_gpio_ensure((unsigned int)ctx->hw_config.pin_reset) != 0u)
+    {
+        return 1;
+    }
 
     /* --- NSS: output, default high --- */
     settings = gpiod_line_settings_new();
@@ -168,42 +232,6 @@ static uint8_t leos_sx126x_gpio_init_ctx(leos_sx126x_ctx_t *ctx)
         return 1;
     }
 
-    /* --- RESET: output, default high --- */
-    settings = gpiod_line_settings_new();
-    if (settings == NULL)
-    {
-        return 1;
-    }
-    gpiod_line_settings_set_direction(settings, GPIOD_LINE_DIRECTION_OUTPUT);
-    gpiod_line_settings_set_output_value(settings, GPIOD_LINE_VALUE_ACTIVE);
-
-    line_cfg = gpiod_line_config_new();
-    if (line_cfg == NULL)
-    {
-        gpiod_line_settings_free(settings);
-        return 1;
-    }
-    gpiod_line_config_add_line_settings(line_cfg, &gpio->reset_offset, 1, settings);
-    gpiod_line_settings_free(settings);
-
-    req_cfg = gpiod_request_config_new();
-    if (req_cfg == NULL)
-    {
-        gpiod_line_config_free(line_cfg);
-        return 1;
-    }
-    gpiod_request_config_set_consumer(req_cfg, "leos_sx126x_reset");
-
-    gpio->reset_req = gpiod_chip_request_lines(g_gpio_chip, req_cfg, line_cfg);
-    gpiod_request_config_free(req_cfg);
-    gpiod_line_config_free(line_cfg);
-    if (gpio->reset_req == NULL)
-    {
-        gpiod_line_request_release(gpio->nss_req);
-        gpio->nss_req = NULL;
-        return 1;
-    }
-
     /* --- BUSY: input --- */
     settings = gpiod_line_settings_new();
     if (settings == NULL)
@@ -234,9 +262,7 @@ static uint8_t leos_sx126x_gpio_init_ctx(leos_sx126x_ctx_t *ctx)
     gpiod_line_config_free(line_cfg);
     if (gpio->busy_req == NULL)
     {
-        gpiod_line_request_release(gpio->reset_req);
         gpiod_line_request_release(gpio->nss_req);
-        gpio->reset_req = NULL;
         gpio->nss_req = NULL;
         return 1;
     }
@@ -259,11 +285,6 @@ static uint8_t leos_sx126x_gpio_deinit_ctx(leos_sx126x_ctx_t *ctx)
         gpiod_line_request_release(gpio->busy_req);
         gpio->busy_req = NULL;
     }
-    if (gpio->reset_req != NULL)
-    {
-        gpiod_line_request_release(gpio->reset_req);
-        gpio->reset_req = NULL;
-    }
     if (gpio->nss_req != NULL)
     {
         gpiod_line_request_release(gpio->nss_req);
@@ -275,16 +296,17 @@ static uint8_t leos_sx126x_gpio_deinit_ctx(leos_sx126x_ctx_t *ctx)
 
 static uint8_t leos_sx126x_reset_write_ctx(leos_sx126x_ctx_t *ctx, uint8_t value)
 {
-    leos_sx126x_linux_gpio_t *gpio = leos_sx126x_linux_gpio(ctx);
     enum gpiod_line_value v;
 
-    if ((gpio == NULL) || (gpio->reset_req == NULL))
+    (void)ctx;
+
+    if (g_reset_req == NULL)
     {
         return 1;
     }
 
     v = value ? GPIOD_LINE_VALUE_ACTIVE : GPIOD_LINE_VALUE_INACTIVE;
-    return (gpiod_line_request_set_value(gpio->reset_req, gpio->reset_offset, v) == 0) ? 0u : 1u;
+    return (gpiod_line_request_set_value(g_reset_req, g_reset_offset, v) == 0) ? 0u : 1u;
 }
 
 static uint8_t leos_sx126x_busy_read_ctx(leos_sx126x_ctx_t *ctx, uint8_t *value)

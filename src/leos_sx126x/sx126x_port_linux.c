@@ -35,8 +35,6 @@ typedef struct
 } leos_sx126x_linux_gpio_t;
 
 static struct gpiod_chip *g_gpio_chip = NULL;
-static int g_spi_fd = -1;
-static uint32_t g_spi_baud_hz = 0u;
 static leos_sx126x_linux_gpio_t g_sx1262_gpio = {0};
 static leos_sx126x_linux_gpio_t g_sx1268_gpio = {0};
 
@@ -101,8 +99,6 @@ static uint8_t leos_sx126x_spi_hw_init(leos_sx126x_ctx_t *ctx)
         return 1;
     }
 
-    g_spi_fd = fd;
-    g_spi_baud_hz = speed_hz;
     return 0;
 }
 
@@ -319,9 +315,18 @@ static uint8_t leos_sx126x_spi_write_read_ctx(leos_sx126x_ctx_t *ctx,
 {
     struct spi_ioc_transfer transfers[2];
     unsigned int transfer_count = 0u;
+    int fd;
+    uint32_t speed_hz;
     leos_sx126x_linux_gpio_t *gpio = leos_sx126x_linux_gpio(ctx);
 
-    if ((ctx == NULL) || (gpio == NULL) || (gpio->nss_req == NULL) || (g_spi_fd < 0))
+    if ((ctx == NULL) || (gpio == NULL) || (gpio->nss_req == NULL))
+    {
+        return 1;
+    }
+
+    fd = leos_sx126x_linux_spi_fd(ctx);
+    speed_hz = ctx->hw_config.spi_baud_hz;
+    if (fd < 0)
     {
         return 1;
     }
@@ -332,7 +337,7 @@ static uint8_t leos_sx126x_spi_write_read_ctx(leos_sx126x_ctx_t *ctx,
     {
         transfers[transfer_count].tx_buf = (uintptr_t)in_buf;
         transfers[transfer_count].len = in_len;
-        transfers[transfer_count].speed_hz = g_spi_baud_hz;
+        transfers[transfer_count].speed_hz = speed_hz;
         transfers[transfer_count].bits_per_word = 8u;
         transfer_count++;
     }
@@ -341,7 +346,7 @@ static uint8_t leos_sx126x_spi_write_read_ctx(leos_sx126x_ctx_t *ctx,
     {
         transfers[transfer_count].rx_buf = (uintptr_t)out_buf;
         transfers[transfer_count].len = out_len;
-        transfers[transfer_count].speed_hz = g_spi_baud_hz;
+        transfers[transfer_count].speed_hz = speed_hz;
         transfers[transfer_count].bits_per_word = 8u;
         transfer_count++;
     }
@@ -356,7 +361,7 @@ static uint8_t leos_sx126x_spi_write_read_ctx(leos_sx126x_ctx_t *ctx,
         return 1;
     }
 
-    if (ioctl(g_spi_fd, SPI_IOC_MESSAGE(transfer_count), transfers) < 0)
+    if (ioctl(fd, SPI_IOC_MESSAGE(transfer_count), transfers) < 0)
     {
         (void)gpiod_line_request_set_value(gpio->nss_req, gpio->nss_offset, GPIOD_LINE_VALUE_ACTIVE);
         return 1;

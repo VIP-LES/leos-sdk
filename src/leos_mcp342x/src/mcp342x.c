@@ -2,16 +2,23 @@
 #include "leos/log.h"
 #include "pico/stdlib.h"
 
+#define MCP342X_CFG_RDY (1u << 7)
+#define MCP342X_CFG_OC  (1u << 4)
+
+// Datasheet reset default: RDY=1, channel=1, O/C=1 (continuous), 12-bit, gain=1.
+#define MCP342X_DEFAULT_CONFIG (MCP342X_CFG_RDY | MCP342X_CFG_OC)
+
 int mcp342x_init(mcp342x_dev_t *dev, i2c_inst_t *block, uint sda, uint scl, uint8_t addr) {
     if (dev == NULL) return -2;
     dev->i2c = block;
-    dev->config = 0;
+    dev->config = MCP342X_DEFAULT_CONFIG;
     i2c_init(block, 400000);
     gpio_set_function(sda, GPIO_FUNC_I2C);
     gpio_set_function(scl, GPIO_FUNC_I2C);
     gpio_pull_up(sda);
     gpio_pull_up(scl);
     dev->address = addr;
+    return 0;
 }
 
 int mcp342x_set_channel(mcp342x_dev_t *dev, mcp342x_channel_t channel) {
@@ -83,10 +90,22 @@ int mcp342x_read_blocking(mcp342x_dev_t *dev, int32_t *value) {
     bool ready = false;
     int ret;
 
+    // In one-shot mode, set RDY=1 to trigger a new conversion before polling.
+    if ((dev->config & MCP342X_CFG_OC) == 0) {
+        uint8_t config = (uint8_t)(dev->config | MCP342X_CFG_RDY);
+        ret = i2c_write_blocking(dev->i2c, dev->address, &config, 1, false);
+        if (ret < 0) {
+            return ret;
+        }
+    }
+
     do {
         ret = mcp342x_read_raw(dev, value, &ready);
         if (ret < 0)
             return ret;
+        if (!ready) {
+            sleep_us(200);
+        }
     } while (!ready);
 
     return 0;

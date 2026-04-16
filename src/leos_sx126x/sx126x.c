@@ -83,6 +83,28 @@ static bool leos_sx126x_to_vendor_cr(leos_radio_coding_rate_t cr, sx1262_lora_cr
     }
 }
 
+static bool leos_sx126x_to_vendor_tcxo_voltage(leos_radio_tcxo_voltage_t voltage,
+                                               sx1262_tcxo_voltage_t *out)
+{
+    if (out == NULL)
+    {
+        return false;
+    }
+
+    switch (voltage)
+    {
+        case LEOS_RADIO_TCXO_1P6V: *out = SX1262_TCXO_VOLTAGE_1P6V; return true;
+        case LEOS_RADIO_TCXO_1P7V: *out = SX1262_TCXO_VOLTAGE_1P7V; return true;
+        case LEOS_RADIO_TCXO_1P8V: *out = SX1262_TCXO_VOLTAGE_1P8V; return true;
+        case LEOS_RADIO_TCXO_2P2V: *out = SX1262_TCXO_VOLTAGE_2P2V; return true;
+        case LEOS_RADIO_TCXO_2P4V: *out = SX1262_TCXO_VOLTAGE_2P4V; return true;
+        case LEOS_RADIO_TCXO_2P7V: *out = SX1262_TCXO_VOLTAGE_2P7V; return true;
+        case LEOS_RADIO_TCXO_3P0V: *out = SX1262_TCXO_VOLTAGE_3P0V; return true;
+        case LEOS_RADIO_TCXO_3P3V: *out = SX1262_TCXO_VOLTAGE_3P3V; return true;
+        default: return false;
+    }
+}
+
 static bool leos_sx126x_low_data_rate_optimize(const leos_radio_config_t *cfg)
 {
     if (cfg == NULL)
@@ -135,7 +157,9 @@ static leos_radio_status_t leos_sx126x_apply_config(leos_sx126x_ctx_t *ctx)
     sx1262_lora_sf_t sf;
     sx1262_lora_bandwidth_t bw;
     sx1262_lora_cr_t cr;
+    sx1262_tcxo_voltage_t tcxo_voltage;
     uint32_t freq_reg;
+    uint32_t tcxo_delay_reg;
     uint8_t modulation;
     uint8_t clamp;
     leos_radio_status_t status;
@@ -147,6 +171,30 @@ static leos_radio_status_t leos_sx126x_apply_config(leos_sx126x_ctx_t *ctx)
     {
         return LEOS_RADIO_ERR_ARG;
     }
+
+    status = leos_sx126x_map_status(sx1262_set_standby(&ctx->handle, SX1262_CLOCK_SOURCE_RC_13M));
+    if (status != LEOS_RADIO_OK) return status;
+
+    if (ctx->config.dio3_tcxo_enable)
+    {
+        if (!leos_sx126x_to_vendor_tcxo_voltage(ctx->config.tcxo_voltage, &tcxo_voltage) ||
+            (sx1262_timeout_convert_to_register(&ctx->handle, (double)ctx->config.tcxo_delay_us, &tcxo_delay_reg) != 0u))
+        {
+            return LEOS_RADIO_ERR_ARG;
+        }
+
+        status = leos_sx126x_map_status(sx1262_set_dio3_as_tcxo_ctrl(&ctx->handle, tcxo_voltage, tcxo_delay_reg));
+        if (status != LEOS_RADIO_OK) return status;
+    }
+
+    if (ctx->config.dio2_rf_switch_enable)
+    {
+        status = leos_sx126x_map_status(sx1262_set_dio2_as_rf_switch_ctrl(&ctx->handle, SX1262_BOOL_TRUE));
+        if (status != LEOS_RADIO_OK) return status;
+    }
+
+    status = leos_sx126x_map_status(sx1262_clear_device_errors(&ctx->handle));
+    if (status != LEOS_RADIO_OK) return status;
 
     status = leos_sx126x_map_status(sx1262_set_standby(&ctx->handle, SX1262_CLOCK_SOURCE_XTAL_32MHZ));
     if (status != LEOS_RADIO_OK) return status;
@@ -319,6 +367,7 @@ void leos_sx126x_get_default_config(leos_radio_t radio, leos_radio_config_t *cfg
     }
 
     memset(cfg, 0, sizeof(*cfg));
+    cfg->tx_timeout_ms = LEOS_SX126X_TX_TIMEOUT_MS;
     cfg->tx_power_dbm = 17;
     cfg->preamble_len_symbols = 12u;
     cfg->bandwidth = LEOS_RADIO_BW_125_KHZ;
@@ -453,7 +502,7 @@ leos_radio_status_t leos_sx126x_send(leos_radio_t radio, const uint8_t *data, si
     ctx->irq_pending = false;
     ctx->mode = LEOS_RADIO_MODE_TX;
 
-    rc = sx1262_set_tx(&ctx->handle, LEOS_SX126X_TX_TIMEOUT_MS * 1000u);
+    rc = sx1262_set_tx(&ctx->handle, ctx->config.tx_timeout_ms * 1000u);
     status = leos_sx126x_map_status(rc);
     if (status != LEOS_RADIO_OK)
     {
@@ -461,7 +510,7 @@ leos_radio_status_t leos_sx126x_send(leos_radio_t radio, const uint8_t *data, si
         return status;
     }
 
-    while ((leos_sx126x_platform_now_ms() - start_ms) < LEOS_SX126X_TX_TIMEOUT_MS)
+    while ((leos_sx126x_platform_now_ms() - start_ms) < ctx->config.tx_timeout_ms)
     {
         if (ctx->irq_pending)
         {

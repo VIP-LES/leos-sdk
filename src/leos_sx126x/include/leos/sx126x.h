@@ -69,6 +69,17 @@ typedef enum {
     LEOS_RADIO_MODE_TX,
 } leos_radio_mode_t;
 
+typedef enum {
+    LEOS_RADIO_TCXO_1P6V = 0x00,
+    LEOS_RADIO_TCXO_1P7V = 0x01,
+    LEOS_RADIO_TCXO_1P8V = 0x02,
+    LEOS_RADIO_TCXO_2P2V = 0x03,
+    LEOS_RADIO_TCXO_2P4V = 0x04,
+    LEOS_RADIO_TCXO_2P7V = 0x05,
+    LEOS_RADIO_TCXO_3P0V = 0x06,
+    LEOS_RADIO_TCXO_3P3V = 0x07,
+} leos_radio_tcxo_voltage_t;
+
 /**
  * @brief Hardware wiring/configuration for one SX126x instance.
  *
@@ -93,6 +104,7 @@ typedef struct {
  */
 typedef struct {
     uint32_t rf_frequency_hz;                       /**< RF center frequency in Hz. */
+    uint32_t tx_timeout_ms;                         /**< Software timeout for one TX operation in ms. */
     int8_t tx_power_dbm;                            /**< Requested TX power in dBm. */
     uint16_t preamble_len_symbols;                  /**< LoRa preamble length in symbols. */
     leos_radio_bandwidth_t bandwidth;               /**< LoRa bandwidth setting. */
@@ -101,6 +113,10 @@ typedef struct {
     uint16_t sync_word;                              /**< LoRa sync word. */
     bool crc_enabled;                               /**< Enable CRC on TX/RX packets. */
     bool iq_inverted;                               /**< Enable IQ inversion if required. */
+    bool dio2_rf_switch_enable;                     /**< Use DIO2 for RF switch control. */
+    bool dio3_tcxo_enable;                          /**< Use DIO3 to power/control a TCXO. */
+    leos_radio_tcxo_voltage_t tcxo_voltage;         /**< DIO3 TCXO voltage when enabled. */
+    uint32_t tcxo_delay_us;                         /**< TCXO startup delay in microseconds. */
 } leos_radio_config_t;
 
 /**

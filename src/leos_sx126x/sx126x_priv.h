@@ -32,6 +32,7 @@ typedef struct
     leos_radio_mode_t mode;
     bool initialized;
     volatile bool irq_pending;
+    volatile uint64_t irq_latched_at_ms;
     bool rx_pending;
     bool rx_overrun;
     uint8_t rx_buf[LEOS_SX126X_MAX_PAYLOAD_LEN];
@@ -48,3 +49,5 @@ void leos_sx126x_receive_callback_impl(leos_sx126x_ctx_t *ctx, uint16_t type, ui
 void leos_sx126x_link_handle(leos_sx126x_ctx_t *ctx);
 uint64_t leos_sx126x_platform_now_ms(void);
 void leos_sx126x_platform_idle(void);
+uint8_t leos_sx126x_platform_read_dio1(leos_sx126x_ctx_t *ctx);
+uint8_t leos_sx126x_platform_read_busy(leos_sx126x_ctx_t *ctx);

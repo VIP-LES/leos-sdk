@@ -141,6 +141,28 @@ void leos_sx126x_platform_idle(void)
     tight_loop_contents();
 }
 
+uint8_t leos_sx126x_platform_read_dio1(leos_sx126x_ctx_t *ctx)
+{
+    if (ctx == NULL)
+    {
+        return 0u;
+    }
+
+    return gpio_get(ctx->hw_config.pin_dio1) ? 1u : 0u;
+}
+
+uint8_t leos_sx126x_platform_read_busy(leos_sx126x_ctx_t *ctx)
+{
+    uint8_t value = 0u;
+
+    if (leos_sx126x_busy_read_ctx(ctx, &value) != 0u)
+    {
+        return 0u;
+    }
+
+    return value;
+}
+
 static void leos_sx126x_debug_print(const char *const fmt, ...)
 {
 #if LEOS_SX126X_ENABLE_DEBUG

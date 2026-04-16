@@ -32,7 +32,7 @@ include(Adafruit_LTR390)
 include(Adafruit_BME680)
 include(Adafruit_PM25AQI)
 include(Adafruit_TSL2591)
-include(sx1262)
+include(sx126x)
 include(ulog)
 # Note: MCP251XFD is not included here
 # since it needs special config before being included

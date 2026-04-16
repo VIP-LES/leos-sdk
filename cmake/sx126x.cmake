@@ -1,0 +1,1 @@
+add_subdirectory(${LEOS_SDK_ROOT}/external/sx126x_driver EXCLUDE_FROM_ALL)

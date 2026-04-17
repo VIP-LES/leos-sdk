@@ -68,10 +68,13 @@ uint32_t canard_mcp_rx_process(void* dev, struct CanardInstance* can)
     // This would require this port having a config struct.
     result = MCP251XFD_GetFIFOStatus(dev, MCP251XFD_FIFO1, &rx_status);
     if (result != ERR_OK)
-        return result;
+    {
+        LOG_ERROR("GetFIFOStatus(FIFO1) failed before RX drain: %d", result);
+        return 0u;
+    }
 
     if (!(rx_status & MCP251XFD_RX_FIFO_NOT_EMPTY))
-        return result;
+        return 0u;
 
     do {
         MCP251XFD_CANMessage msg;
@@ -115,15 +118,16 @@ uint32_t canard_mcp_rx_process(void* dev, struct CanardInstance* can)
 
         // Check if more frames are available
         result = MCP251XFD_GetFIFOStatus(dev, MCP251XFD_FIFO1, &rx_status);
-        if (result != ERR_OK)
-            LOG_ERROR("canardRxAccept failed with error: %d. Possible OOM.", result);
-        break;
+        if (result != ERR_OK) {
+            LOG_ERROR("GetFIFOStatus(FIFO1) failed during RX drain: %d", result);
+            break;
+        }
 
     } while (rx_status & MCP251XFD_RX_FIFO_NOT_EMPTY);
     if (frame_count > 0) {
         LOG_TRACE("Processed %lu incoming CAN frames.", frame_count);
     }
-    return result;
+    return frame_count;
 }
 
 leos_cyphal_transport_t leos_cyphal_transport_mcp251xfd(MCP251XFD *dev) {

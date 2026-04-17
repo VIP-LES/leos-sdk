@@ -1,7 +1,14 @@
 #include <stdio.h>
-#include "pico/stdio.h"
-#include "pico/time.h"
+#include <stdint.h>
+#include <stddef.h>
 #include "ulog.h"
+
+#if IS_LINUX
+    #include <time.h>
+#else
+    #include "pico/stdio.h"
+    #include "pico/time.h"
+#endif
 
 #define COL_RESET "\x1b[0m"
 #define COL_TRACE "\x1b[35m" // purple
@@ -9,6 +16,16 @@
 #define COL_INFO "\x1b[37m"  // white
 #define COL_WARN "\x1b[33m"  // yellow
 #define COL_ERROR "\x1b[31m" // red
+
+static uint32_t platform_time_ms(void) {
+    #if IS_LINUX
+        struct timespec ts;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        return (uint32_t)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
+    #else
+        return to_ms_since_boot(get_absolute_time());
+    #endif
+}
 
 void console_logger(ulog_level_t severity, char *msg) {
     const char* color;
@@ -37,7 +54,7 @@ void console_logger(ulog_level_t severity, char *msg) {
     }
     const char* level_name = ulog_level_name(severity);
 
-    uint32_t ms = to_ms_since_boot(get_absolute_time());
+    uint32_t ms = platform_time_ms();
     uint32_t sec = ms / 1000;
     uint32_t msec = ms % 1000;
 
@@ -46,8 +63,10 @@ void console_logger(ulog_level_t severity, char *msg) {
 }
 
 bool leos_log_init_console(ulog_level_t level) {
-    if (!stdio_init_all())
-        return false;
+    #if !IS_LINUX
+        if (!stdio_init_all())
+            return false;
+    #endif
     ulog_init();
     ulog_err_t result = ulog_subscribe(console_logger, level);
     return (result == ULOG_ERR_NONE);

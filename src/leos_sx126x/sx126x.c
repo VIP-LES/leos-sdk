@@ -154,6 +154,36 @@ static leos_radio_status_t leos_sx126x_apply_packet_params(leos_sx126x_ctx_t *ct
                                       ctx->config.iq_inverted ? SX1262_BOOL_TRUE : SX1262_BOOL_FALSE));
 }
 
+static leos_radio_status_t leos_sx126x_service_deferred_irq(leos_sx126x_ctx_t *ctx)
+{
+    leos_radio_status_t status;
+
+    if (ctx == NULL)
+    {
+        return LEOS_RADIO_ERR_ARG;
+    }
+
+    if (!ctx->irq_pending)
+    {
+        return LEOS_RADIO_OK;
+    }
+
+    ctx->irq_pending = false;
+    LOG_TRACE("sx126x poll service_irq radio=%d mode=%d tx_done=%d timeout=%d",
+              (int)ctx->radio,
+              (int)ctx->mode,
+              ctx->handle.tx_done ? 1 : 0,
+              ctx->handle.timeout ? 1 : 0);
+    status = leos_sx126x_map_status(sx1262_irq_handler(&ctx->handle));
+    LOG_TRACE("sx126x poll service_irq done radio=%d status=%d tx_done=%d timeout=%d mode=%d",
+              (int)ctx->radio,
+              (int)status,
+              ctx->handle.tx_done ? 1 : 0,
+              ctx->handle.timeout ? 1 : 0,
+              (int)ctx->mode);
+    return status;
+}
+
 static leos_radio_status_t leos_sx126x_apply_config(leos_sx126x_ctx_t *ctx)
 {
     sx1262_lora_sf_t sf;
@@ -436,6 +466,9 @@ leos_radio_status_t leos_sx126x_init(leos_radio_t radio,
     ctx->config = *cfg;
     ctx->irq_pending = false;
     ctx->irq_latched_at_ms = 0u;
+    ctx->tx_in_flight = false;
+    ctx->tx_started_at_ms = 0u;
+    ctx->last_tx_status = LEOS_RADIO_OK;
     ctx->rx_pending = false;
     ctx->rx_overrun = false;
     ctx->rx_len = 0u;
@@ -495,13 +528,12 @@ leos_radio_status_t leos_sx126x_init(leos_radio_t radio,
 }
 
 /**
- * @brief Transmit one packet and wait for completion.
+ * @brief Start transmitting one packet and return immediately.
  */
-leos_radio_status_t leos_sx126x_send(leos_radio_t radio, const uint8_t *data, size_t len)
+leos_radio_status_t leos_sx126x_start_tx(leos_radio_t radio, const uint8_t *data, size_t len)
 {
     leos_sx126x_ctx_t *ctx;
     leos_radio_status_t status;
-    const uint64_t start_ms = leos_sx126x_platform_now_ms();
     uint8_t rc;
 
     if ((data == NULL) || (len == 0u) || (len > LEOS_SX126X_MAX_PAYLOAD_LEN))
@@ -515,7 +547,7 @@ leos_radio_status_t leos_sx126x_send(leos_radio_t radio, const uint8_t *data, si
         return LEOS_RADIO_ERR_STATE;
     }
 
-    if (ctx->mode == LEOS_RADIO_MODE_TX)
+    if (ctx->tx_in_flight || (ctx->mode == LEOS_RADIO_MODE_TX))
     {
         return LEOS_RADIO_ERR_BUSY;
     }
@@ -541,49 +573,23 @@ leos_radio_status_t leos_sx126x_send(leos_radio_t radio, const uint8_t *data, si
     ctx->handle.timeout = 0u;
     ctx->irq_pending = false;
     ctx->irq_latched_at_ms = 0u;
+    ctx->tx_in_flight = true;
+    ctx->tx_started_at_ms = leos_sx126x_platform_now_ms();
+    ctx->last_tx_status = LEOS_RADIO_OK;
     ctx->mode = LEOS_RADIO_MODE_TX;
 
     rc = sx1262_set_tx(&ctx->handle, ctx->config.tx_timeout_ms * 1000u);
     status = leos_sx126x_map_status(rc);
     if (status != LEOS_RADIO_OK)
     {
+        ctx->tx_in_flight = false;
+        ctx->tx_started_at_ms = 0u;
+        ctx->last_tx_status = status;
         ctx->mode = LEOS_RADIO_MODE_STANDBY;
         return status;
     }
 
-    while ((leos_sx126x_platform_now_ms() - start_ms) < ctx->config.tx_timeout_ms)
-    {
-        if (ctx->irq_pending)
-        {
-            status = leos_sx126x_process_irq(radio);
-            if (status != LEOS_RADIO_OK)
-            {
-                ctx->mode = LEOS_RADIO_MODE_STANDBY;
-                return status;
-            }
-        }
-
-        if (ctx->handle.tx_done)
-        {
-            LOG_TRACE("sx126x send complete radio=%d elapsed_ms=%llu irq_latched_ms=%llu service_delay_ms=%llu",
-                     (int)radio,
-                     (unsigned long long)(leos_sx126x_platform_now_ms() - start_ms),
-                     (unsigned long long)ctx->irq_latched_at_ms,
-                     (unsigned long long)((ctx->irq_latched_at_ms == 0u) ? 0u : (leos_sx126x_platform_now_ms() - ctx->irq_latched_at_ms)));
-            ctx->mode = LEOS_RADIO_MODE_STANDBY;
-            return LEOS_RADIO_OK;
-        }
-
-        if (ctx->handle.timeout)
-        {
-            ctx->mode = LEOS_RADIO_MODE_STANDBY;
-            return LEOS_RADIO_ERR_TIMEOUT;
-        }
-
-        leos_sx126x_platform_idle();
-    }
-    ctx->mode = LEOS_RADIO_MODE_STANDBY;
-    return LEOS_RADIO_ERR_TIMEOUT;
+    return LEOS_RADIO_OK;
 }
 
 /**
@@ -710,7 +716,7 @@ leos_radio_status_t leos_sx126x_standby(leos_radio_t radio)
  * @brief Flag deferred IRQ work for the selected radio.
  *
  * Only latch the interrupt here. Packet data remains in the SX126x until
- * leos_sx126x_process_irq() runs in non-ISR context and drains it over SPI.
+ * leos_sx126x_poll() runs in non-ISR context and drains it over SPI.
  */
 void leos_sx126x_handle_dio1_irq(leos_radio_t radio)
 {
@@ -731,10 +737,11 @@ void leos_sx126x_handle_dio1_irq(leos_radio_t radio)
  * packets because the radio does not provide a multi-packet RX queue for
  * unread frames.
  */
-leos_radio_status_t leos_sx126x_process_irq(leos_radio_t radio)
+leos_radio_status_t leos_sx126x_poll(leos_radio_t radio)
 {
     leos_sx126x_ctx_t *ctx;
     leos_radio_status_t status;
+    uint64_t now_ms;
 
     ctx = leos_sx126x_ctx(radio);
     if ((ctx == NULL) || !ctx->initialized)
@@ -742,25 +749,71 @@ leos_radio_status_t leos_sx126x_process_irq(leos_radio_t radio)
         return LEOS_RADIO_ERR_STATE;
     }
 
-    if (!ctx->irq_pending)
+    status = leos_sx126x_service_deferred_irq(ctx);
+    if (status != LEOS_RADIO_OK)
+    {
+        if (ctx->tx_in_flight)
+        {
+            ctx->tx_in_flight = false;
+            ctx->tx_started_at_ms = 0u;
+            ctx->last_tx_status = status;
+            ctx->mode = LEOS_RADIO_MODE_STANDBY;
+        }
+        return status;
+    }
+
+    if (!ctx->tx_in_flight)
     {
         return LEOS_RADIO_OK;
     }
 
-    ctx->irq_pending = false;
-    LOG_TRACE("sx126x process_irq radio=%d mode=%d tx_done=%d timeout=%d",
-              (int)radio,
-              (int)ctx->mode,
-              ctx->handle.tx_done ? 1 : 0,
-              ctx->handle.timeout ? 1 : 0);
-    status = leos_sx126x_map_status(sx1262_irq_handler(&ctx->handle));
-    LOG_TRACE("sx126x process_irq done radio=%d status=%d tx_done=%d timeout=%d mode=%d",
-              (int)radio,
-              (int)status,
-              ctx->handle.tx_done ? 1 : 0,
-              ctx->handle.timeout ? 1 : 0,
-              (int)ctx->mode);
-    return status;
+    now_ms = leos_sx126x_platform_now_ms();
+    if (ctx->handle.tx_done)
+    {
+        LOG_TRACE("sx126x tx complete radio=%d elapsed_ms=%llu irq_latched_ms=%llu service_delay_ms=%llu",
+                  (int)radio,
+                  (unsigned long long)(now_ms - ctx->tx_started_at_ms),
+                  (unsigned long long)ctx->irq_latched_at_ms,
+                  (unsigned long long)((ctx->irq_latched_at_ms == 0u) ? 0u : (now_ms - ctx->irq_latched_at_ms)));
+        ctx->tx_in_flight = false;
+        ctx->tx_started_at_ms = 0u;
+        ctx->last_tx_status = LEOS_RADIO_OK;
+        ctx->mode = LEOS_RADIO_MODE_STANDBY;
+        return LEOS_RADIO_OK;
+    }
+
+    if (ctx->handle.timeout || ((now_ms - ctx->tx_started_at_ms) >= ctx->config.tx_timeout_ms))
+    {
+        ctx->tx_in_flight = false;
+        ctx->tx_started_at_ms = 0u;
+        ctx->last_tx_status = LEOS_RADIO_ERR_TIMEOUT;
+        ctx->mode = LEOS_RADIO_MODE_STANDBY;
+        return LEOS_RADIO_OK;
+    }
+
+    return LEOS_RADIO_OK;
+}
+
+bool leos_sx126x_tx_in_flight(leos_radio_t radio)
+{
+    leos_sx126x_ctx_t *ctx = leos_sx126x_ctx(radio);
+    if (ctx == NULL)
+    {
+        return false;
+    }
+
+    return ctx->tx_in_flight;
+}
+
+leos_radio_status_t leos_sx126x_last_tx_status(leos_radio_t radio)
+{
+    leos_sx126x_ctx_t *ctx = leos_sx126x_ctx(radio);
+    if (ctx == NULL)
+    {
+        return LEOS_RADIO_ERR_STATE;
+    }
+
+    return ctx->last_tx_status;
 }
 
 /**

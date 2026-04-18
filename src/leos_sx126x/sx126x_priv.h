@@ -33,6 +33,9 @@ typedef struct
     bool initialized;
     volatile bool irq_pending;
     volatile uint64_t irq_latched_at_ms;
+    bool tx_in_flight;
+    uint64_t tx_started_at_ms;
+    leos_radio_status_t last_tx_status;
     bool rx_pending;
     bool rx_overrun;
     uint8_t rx_buf[LEOS_SX126X_MAX_PAYLOAD_LEN];

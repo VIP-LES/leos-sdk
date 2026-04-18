@@ -142,17 +142,17 @@ leos_radio_status_t leos_sx126x_init(leos_radio_t radio,
                                      const leos_radio_config_t *cfg);
 
 /**
- * @brief Transmit one packet and wait for completion.
+ * @brief Start transmitting one packet and return immediately.
  */
-leos_radio_status_t leos_sx126x_send(leos_radio_t radio,
-                                     const uint8_t *data,
-                                     size_t len);
+leos_radio_status_t leos_sx126x_start_tx(leos_radio_t radio,
+                                         const uint8_t *data,
+                                         size_t len);
 
 /**
  * @brief Place the selected radio into RX mode.
  *
  * @note RX packet bytes are not copied out of the radio until
- *       leos_sx126x_process_irq() services a latched DIO1 interrupt.
+ *       leos_sx126x_poll() services a latched DIO1 interrupt.
  *       Downstream code must therefore arrange prompt deferred IRQ
  *       servicing after DIO1 asserts; slow polling can lose packets
  *       before the SDK reads them from the radio.
@@ -183,22 +183,33 @@ leos_radio_status_t leos_sx126x_standby(leos_radio_t radio);
  *
  * @note This function is ISR-safe because it only latches that DIO1
  *       asserted. It does not read packet bytes from the radio.
- *       leos_sx126x_process_irq() must be called promptly afterward in
+ *       leos_sx126x_poll() must be called promptly afterward in
  *       non-ISR context to drain the radio before a later receive can
  *       overwrite the unread packet.
  */
 void leos_sx126x_handle_dio1_irq(leos_radio_t radio);
 
 /**
- * @brief Process deferred IRQ work outside ISR context.
+ * @brief Advance deferred IRQ work and TX completion outside ISR context.
  *
  * @note This function performs the SPI transactions that read received
- *       packet data out of the SX126x. It is intended to run as soon as
- *       possible after leos_sx126x_handle_dio1_irq() latches DIO1.
- *       Treating this as a low-rate polling hook rather than prompt
- *       deferred IRQ servicing risks packet loss.
+ *       packet data out of the SX126x and observes TX completion/timeouts.
+ *       It is intended to run as soon as possible after
+ *       leos_sx126x_handle_dio1_irq() latches DIO1. Treating this as a
+ *       low-rate polling hook rather than prompt deferred IRQ servicing
+ *       risks packet loss.
  */
-leos_radio_status_t leos_sx126x_process_irq(leos_radio_t radio);
+leos_radio_status_t leos_sx126x_poll(leos_radio_t radio);
+
+/**
+ * @brief Return whether the selected radio currently has a TX in flight.
+ */
+bool leos_sx126x_tx_in_flight(leos_radio_t radio);
+
+/**
+ * @brief Return the terminal status of the most recent TX.
+ */
+leos_radio_status_t leos_sx126x_last_tx_status(leos_radio_t radio);
 
 /**
  * @brief Return the current mode of the selected radio.

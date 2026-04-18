@@ -770,7 +770,7 @@ leos_radio_status_t leos_sx126x_poll(leos_radio_t radio)
     now_ms = leos_sx126x_platform_now_ms();
     if (ctx->handle.tx_done)
     {
-        LOG_TRACE("sx126x tx complete radio=%d elapsed_ms=%llu irq_latched_ms=%llu service_delay_ms=%llu",
+        LOG_DEBUG("sx126x tx complete radio=%d elapsed_ms=%llu irq_latched_ms=%llu service_delay_ms=%llu",
                   (int)radio,
                   (unsigned long long)(now_ms - ctx->tx_started_at_ms),
                   (unsigned long long)ctx->irq_latched_at_ms,

@@ -1,12 +1,9 @@
-#include "leos/mcp251xfd/config.h"
 #include "leos/mcp251xfd.h"
 #include "leos/mcp251xfd/config.h"
 #include "MCP251XFD.h"
 #include "hardware/spi.h"
 #include "hardware/sync.h"
 #include "pico/stdlib.h"
-
-#define SPI_TIMEOUT_US 5000
 
 /* ==========  CAN DRIVERS AND HAL FUNCTIONS   ========== */
 
@@ -52,8 +49,8 @@ eERRORRESULT MCP251XFD_InterfaceInit_Pico(void* pIntDev, uint8_t chipSelect, con
     gpio_set_function(hw->pin_sck, GPIO_FUNC_SPI);
     // CS pin setup. HIGH when SPI is not transferring
     gpio_init(chipSelect);
-    gpio_set_dir(chipSelect, GPIO_OUT);
     gpio_put(chipSelect, 1);
+    gpio_set_dir(chipSelect, GPIO_OUT);
     // Set according to datasheet
     spi_set_format(hw->spi, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
 
@@ -81,10 +78,14 @@ eERRORRESULT MCP251XFD_InterfaceTransfer_Pico(void* pIntDev, uint8_t chipSelect,
     // For most cases, the driver will be padding the TX with zeroes
     // or garbage data so that it gets back the desired RX length.
 
-    spi_write_read_blocking(hw->spi, txData, rxData, size);
+    // The MCP driver passes a null receive buffer for RESET and write-only
+    // commands. Pico's full-duplex API requires a valid receive buffer.
+    const int transferred = rxData == NULL
+        ? spi_write_blocking(hw->spi, txData, size)
+        : spi_write_read_blocking(hw->spi, txData, rxData, size);
 
     gpio_put(chipSelect, 1);
     restore_interrupts(irqs);
 
-    return ERR_OK;
+    return transferred >= 0 && (size_t)transferred == size ? ERR_OK : ERR__SPI_COMM_ERROR;
 }

@@ -14,6 +14,7 @@ target_include_directories(cavl2 INTERFACE ${CAVL2_DIR})
 # Build libcanard
 add_library(libcanard EXCLUDE_FROM_ALL ${LIBCANARD_C})
 target_link_libraries(libcanard PUBLIC cavl2)
+set_target_properties(libcanard PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
 
 # Export its include directory so anyone linking to it can find canard.h
 target_include_directories(libcanard PUBLIC ${LIBCANARD_DIR})

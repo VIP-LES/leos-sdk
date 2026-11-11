@@ -1,6 +1,3 @@
-# o1heap.cmake
-# Manages compile definitions and code generation for this external lib
-
 set(SX1262_DIR ${LEOS_SDK_ROOT}/external/sx1262/)
 
 set(SX1262_C ${SX1262_DIR}/src/driver_sx1262.c)

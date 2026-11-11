@@ -15,6 +15,9 @@ eERRORRESULT leos_mcp251xfd_init(leos_mcp251xfd_t *device,
     const leos_mcp251xfd_hw_t *hw = &device->hw;
     memset(&device->native, 0, sizeof(device->native));
     device->irq_pending = false;
+    device->txq_full_logged = false;
+    device->error_status_known = false;
+    device->last_error_status = 0;
     MCP251XFD *native = &device->native;
     LOG_INFO("Initializing MCP251XFD");
     LOG_TRACE("SPI Block: %d", hw->spi);
@@ -115,7 +118,48 @@ eERRORRESULT leos_mcp251xfd_init(leos_mcp251xfd_t *device,
 void leos_mcp251xfd_deinit(leos_mcp251xfd_t *dev) {
     if (!dev) return;
     dev->irq_pending = false;
+    dev->txq_full_logged = false;
+    dev->error_status_known = false;
     dev->native.InterfaceDevice = NULL;
+}
+
+static void log_can_error_state(leos_mcp251xfd_t *dev, bool bus_error_event)
+{
+    uint8_t tx_errors = 0;
+    uint8_t rx_errors = 0;
+    eMCP251XFD_TXRXErrorStatus status;
+    eERRORRESULT result = MCP251XFD_GetTransmitReceiveErrorCountAndStatus(
+        &dev->native, &tx_errors, &rx_errors, &status);
+    if (result != ERR_OK) {
+        LOG_ERROR("MCP251XFD: could not read CAN error state: %d", result);
+        return;
+    }
+
+    const uint8_t flags = (uint8_t)status;
+    if (!dev->error_status_known || (flags != dev->last_error_status)) {
+        if (flags & MCP251XFD_TX_BUS_OFF_STATE)
+            LOG_ERROR("CAN bus off (TEC=%u REC=%u)", (unsigned)tx_errors, (unsigned)rx_errors);
+        else if (flags & (MCP251XFD_TX_BUS_PASSIVE_STATE | MCP251XFD_RX_BUS_PASSIVE_STATE))
+            LOG_WARNING("CAN error passive (status=0x%02x TEC=%u REC=%u)",
+                        (unsigned)flags, (unsigned)tx_errors, (unsigned)rx_errors);
+        else if (flags & (MCP251XFD_TX_WARNING_STATE | MCP251XFD_RX_WARNING_STATE |
+                          MCP251XFD_TX_RX_WARNING_STATE))
+            LOG_DEBUG("CAN error warning (status=0x%02x TEC=%u REC=%u)",
+                      (unsigned)flags, (unsigned)tx_errors, (unsigned)rx_errors);
+        else if (dev->error_status_known && dev->last_error_status != 0u)
+            LOG_INFO("CAN error state recovered (TEC=%u REC=%u)",
+                     (unsigned)tx_errors, (unsigned)rx_errors);
+        else if (bus_error_event)
+            LOG_DEBUG("CAN bus error (TEC=%u REC=%u)", (unsigned)tx_errors, (unsigned)rx_errors);
+        else
+            LOG_TRACE("CAN error state nominal (TEC=%u REC=%u)",
+                      (unsigned)tx_errors, (unsigned)rx_errors);
+        dev->last_error_status = flags;
+        dev->error_status_known = true;
+    } else {
+        LOG_TRACE("CAN bus error state unchanged (status=0x%02x TEC=%u REC=%u)",
+                  (unsigned)flags, (unsigned)tx_errors, (unsigned)rx_errors);
+    }
 }
 
 static uint8_t payload_length_to_dlc(size_t size)
@@ -139,8 +183,26 @@ eERRORRESULT leos_mcp251xfd_send(leos_mcp251xfd_t *dev, uint32_t can_id,
 
     eMCP251XFD_TXQstatus status;
     eERRORRESULT result = MCP251XFD_GetTXQStatus(&dev->native, &status);
-    if (result != ERR_OK) return result;
-    if (!(status & MCP251XFD_TXQ_NOT_FULL)) return ERR__BUFFER_FULL;
+    if (result != ERR_OK) {
+        LOG_ERROR("MCP251XFD: TXQ status read failed: %d", result);
+        return result;
+    }
+    if (!(status & MCP251XFD_TXQ_NOT_FULL)) {
+        if (!dev->txq_full_logged) {
+            LOG_DEBUG("CAN TXQ full; frame 0x%08lx will be retried", (unsigned long)can_id);
+            log_can_error_state(dev, false);
+            dev->txq_full_logged = true;
+        } else {
+            LOG_TRACE("CAN TXQ still full; frame 0x%08lx pending", (unsigned long)can_id);
+        }
+        return ERR__BUFFER_FULL;
+    }
+    if (dev->txq_full_logged) {
+        LOG_DEBUG("CAN TXQ has room again");
+        dev->txq_full_logged = false;
+        if (dev->error_status_known && dev->last_error_status != 0u)
+            log_can_error_state(dev, false);
+    }
 
     uint8_t payload[64] = {0};
     if (size > 0u) memcpy(payload, data, size);
@@ -150,7 +212,13 @@ eERRORRESULT leos_mcp251xfd_send(leos_mcp251xfd_t *dev, uint32_t can_id,
         .ControlFlags = MCP251XFD_CANFD_FRAME | MCP251XFD_EXTENDED_MESSAGE_ID,
         .PayloadData = payload,
     };
-    return MCP251XFD_TransmitMessageToTXQ(&dev->native, &message, true);
+    result = MCP251XFD_TransmitMessageToTXQ(&dev->native, &message, true);
+    if (result == ERR_OK)
+        LOG_TRACE("CAN TX queued id=0x%08lx bytes=%u", (unsigned long)can_id,
+                  (unsigned)MCP251XFD_DLCToByte(message.DLC, true));
+    else
+        LOG_ERROR("MCP251XFD: TXQ write failed: %d", result);
+    return result;
 }
 
 eERRORRESULT leos_mcp251xfd_receive(leos_mcp251xfd_t *dev, uint32_t *can_id,
@@ -163,7 +231,10 @@ eERRORRESULT leos_mcp251xfd_receive(leos_mcp251xfd_t *dev, uint32_t *can_id,
 
     eMCP251XFD_FIFOstatus status;
     eERRORRESULT result = MCP251XFD_GetFIFOStatus(&dev->native, MCP251XFD_FIFO1, &status);
-    if (result != ERR_OK) return result;
+    if (result != ERR_OK) {
+        LOG_ERROR("MCP251XFD: FIFO1 status read failed: %d", result);
+        return result;
+    }
     if (!(status & MCP251XFD_RX_FIFO_NOT_EMPTY)) return ERR__NO_DATA_AVAILABLE;
 
     MCP251XFD_CANMessage message = {.PayloadData = data};
@@ -171,11 +242,16 @@ eERRORRESULT leos_mcp251xfd_receive(leos_mcp251xfd_t *dev, uint32_t *can_id,
     result = MCP251XFD_ReceiveMessageFromFIFO(&dev->native, &message,
                                                MCP251XFD_PAYLOAD_64BYTE,
                                                &timestamp, MCP251XFD_FIFO1);
-    if (result != ERR_OK) return result;
+    if (result != ERR_OK) {
+        LOG_ERROR("MCP251XFD: FIFO1 read failed: %d", result);
+        return result;
+    }
     *can_id = message.MessageID;
     *size = MCP251XFD_DLCToByte(message.DLC,
                                 (message.ControlFlags & MCP251XFD_CANFD_FRAME) != 0);
     if (timestamp_us != NULL) *timestamp_us = timestamp;
+    LOG_TRACE("CAN RX id=0x%08lx bytes=%u timestamp_us=%lu",
+              (unsigned long)*can_id, (unsigned)*size, (unsigned long)timestamp);
     return ERR_OK;
 }
 
@@ -194,7 +270,7 @@ void leos_mcp251xfd_task(leos_mcp251xfd_t *dev) {
         return;
     dev->irq_pending = false;
     MCP251XFD *native = &dev->native;
-    LOG_DEBUG("MCP251XFD: servicing IRQ");
+    LOG_TRACE("MCP251XFD: servicing IRQ");
 
     eERRORRESULT err;
     eMCP251XFD_InterruptFlagCode code;
@@ -221,13 +297,9 @@ void leos_mcp251xfd_task(leos_mcp251xfd_t *dev) {
         {
         case MCP251XFD_ERROR_INTERRUPT:
         {
-            LOG_WARNING("There was an error on the CAN bus. Most likely no other devices are connected");
-            eMCP251XFD_TXRXErrorStatus bus_status;
-            MCP251XFD_GetTransmitReceiveErrorStatus(native, &bus_status);
-            LOG_DEBUG("Bus Error: %d", bus_status);
-
-
-            MCP251XFD_ClearInterruptEvents(native, MCP251XFD_INT_BUS_ERROR_EVENT);
+            log_can_error_state(dev, true);
+            err = MCP251XFD_ClearInterruptEvents(native, MCP251XFD_INT_BUS_ERROR_EVENT);
+            if (err != ERR_OK) LOG_ERROR("MCP251XFD: clearing bus error IRQ failed: %d", err);
             break;
         }
 
@@ -259,8 +331,11 @@ void leos_mcp251xfd_task(leos_mcp251xfd_t *dev) {
                 break;
             }
             if (qst & MCP251XFD_TXQ_ATTEMPTS_EXHAUSTED) {
-                MCP251XFD_ResetTXQ(native);
-                // MCP251XFD_ClearTXQAttemptsEvent(dev);
+                LOG_WARNING("CAN TXQ attempts exhausted (status=0x%02x); resetting TXQ and dropping queued frames",
+                            (unsigned)qst);
+                log_can_error_state(dev, true);
+                err = MCP251XFD_ResetTXQ(native);
+                if (err != ERR_OK) LOG_ERROR("MCP251XFD: TXQ reset failed: %d", err);
             }
             // MCP251XFD_ClearInterruptEvents(dev, MCP251XFD_INT_TX_EVENT);
             break;

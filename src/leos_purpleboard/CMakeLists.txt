@@ -16,12 +16,13 @@ target_include_directories(leos_purpleboard
 target_link_libraries(leos_purpleboard
     PRIVATE
     leos_log
+)
+target_link_libraries(leos_purpleboard
+    PUBLIC
     Adafruit_LTR390
     Adafruit_PM25AQI
     Adafruit_BME680
     Adafruit_TSL2591
-)
-target_link_libraries(leos_purpleboard
-    PUBLIC
     hardware_i2c
+    pico_time
 )

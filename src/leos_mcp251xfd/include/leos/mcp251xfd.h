@@ -4,18 +4,18 @@
 #include "MCP251XFD.h"
 
 /**
- * @brief User-provided callback invoked to service the receive FIFO.
+ * @brief Caller-owned MCP251XFD device and Pico hardware configuration.
  *
- * The callback is executed from a non-interrupt context (i.e., from
- * @ref leos_mcp251xfd_task()). The callback is responsible for draining
- * the configured receive FIFO (commonly FIFO1). This typically involves
- * repeatedly calling @ref MCP251XFD_ReceiveMessageFromFIFO() until the
- * FIFO is empty.
- *
- * @param device          Pointer to the MCP251XFD instance.
- * @param user_reference  Opaque pointer supplied during callback registration.
+ * Fill in @c hw before initialization. Keep this object at a stable address
+ * while initialized: the vendor handle passes its address to the Pico SPI HAL.
+ * Use @c &device.native when calling the vendor MCP251XFD API directly.
  */
-typedef void (*leos_mcp251xfd_rx_cb)(MCP251XFD *device, void *user_reference);
+typedef struct
+{
+    MCP251XFD native;                    /**< Vendor controller state. */
+    leos_mcp251xfd_hw_t hw;              /**< Pico SPI and GPIO configuration. */
+    volatile bool irq_pending;           /**< IRQ work to service outside the ISR. */
+} leos_mcp251xfd_t;
 
 
 /* ========== MCP251XFD Initialization Helpers ========== */
@@ -32,12 +32,9 @@ typedef void (*leos_mcp251xfd_rx_cb)(MCP251XFD *device, void *user_reference);
  * leos_mcp251xfd_irq_handler() for this device when the IRQ pin signals.
  *
  * @param[in,out] device
- *     Pointer to a user-allocated @ref MCP251XFD structure. **Must be zeroed**
- *     before calling this function. On success, it will store the initialized
- *     driver state.
- *
- * @param[in] hw
- *     Hardware pin and SPI configuration for this device.
+ *     Pointer to caller-owned @ref leos_mcp251xfd_t storage. The function
+ *     initializes the embedded vendor handle. Fill in @c device->hw first.
+ *     Deinitialize before initializing the same object again.
  *
  * @param[in] config
  *     Static configuration describing bit timing, filters, FIFOs, and mode.
@@ -49,8 +46,7 @@ typedef void (*leos_mcp251xfd_rx_cb)(MCP251XFD *device, void *user_reference);
  * @note The SPI clock must not exceed 80% of SYSCLK. For SYSCLK = 40 MHz,
  *       SPI should be ≤ 32 MHz.
  */
-eERRORRESULT leos_mcp251xfd_init(MCP251XFD *device,
-                                 const leos_mcp251xfd_hw_t *hw,
+eERRORRESULT leos_mcp251xfd_init(leos_mcp251xfd_t *device,
                                  const leos_mcp251xfd_config_t *config);
 
 /**
@@ -62,7 +58,7 @@ eERRORRESULT leos_mcp251xfd_init(MCP251XFD *device,
  *
  * @param device MCP251XFD device whose IRQ pin signaled.
  */
-void leos_mcp251xfd_irq_handler(MCP251XFD *device);
+void leos_mcp251xfd_irq_handler(leos_mcp251xfd_t *device);
 
 /**
  * @brief Process pending MCP251XFD interrupts and service RX/TX events.
@@ -72,46 +68,33 @@ void leos_mcp251xfd_irq_handler(MCP251XFD *device);
  * @ref leos_mcp251xfd_irq_handler(), this function handles it by:
  *
  *  - Querying and clearing interrupt causes
- *  - Calling the user-provided RX callback to drain FIFO frames
- *  - Notifying TX-complete events if needed
+ *  - Handling non-RX interrupt events
+ *  - Leaving FIFO1 frames for the caller's receive path to drain
  *
- * No actual interrupt or SPI work occurs in the ISR; all processing occurs here.
+ * No SPI work occurs in the ISR. If FIFO1 is pending, this function returns
+ * with the IRQ latched so the caller can drain FIFO1, then call this function
+ * again to process any other pending events. The Cyphal MCP transport drains
+ * FIFO1 through leos_cyphal_rx_process().
  *
- * @param dev Pointer to the MCP251XFD instance to service.
+ * @param dev Pointer to the device to service.
  */
-void leos_mcp251xfd_task(MCP251XFD *dev);
+void leos_mcp251xfd_task(leos_mcp251xfd_t *dev);
 
 /**
- * @brief Register a user RX callback for processing received CAN frames.
+ * @brief Deinitialize an MCP251XFD device instance.
  *
- * The callback will be invoked by @ref leos_mcp251xfd_task() whenever the
- * receive FIFO signals pending frames. The callback must drain the FIFO
- * completely to ensure that the MCP251XFD INT pin deasserts correctly.
- *
- * @param dev             MCP251XFD instance to register the callback for.
- * @param callback        The receive callback function.
- * @param user_reference  Opaque pointer passed to the callback on invocation.
- */
-void leos_mcp251xfd_set_rx_handler(MCP251XFD *dev,
-                                    leos_mcp251xfd_rx_cb callback,
-                                    void *user_reference);
-
-/**
- * @brief Deinitialize an MCP251XFD device instance and release driver resources.
- *
- * This frees the driver's context structure and detaches it from the device.
- * The application owns GPIO interrupt configuration and must disable its IRQ
+ * This clears the driver's interrupt state. The
+ * application owns GPIO interrupt configuration and must disable its IRQ
  * routing before deinitializing the device.
  *
  * After calling this function:
- *   - The MCP251XFD *dev handle must NOT be used again unless re-initialized.
- *   - Any registered RX callback becomes invalid.
+ *   - The embedded vendor handle must not be used again unless re-initialized.
  *   - leos_mcp251xfd_task() must no longer be called for this device.
  *
  * This function is safe to call even if initialization failed or was only
  * partially completed (it performs null checks).
  *
- * @param dev Pointer to the MCP251XFD device instance that was previously
+ * @param dev Pointer to the device instance that was previously
  *            initialized with leos_mcp251xfd_init(). May be NULL.
  *
  * @note This does not power down the MCP251XFD hardware or alter SPI pins.
@@ -119,4 +102,4 @@ void leos_mcp251xfd_set_rx_handler(MCP251XFD *dev,
  *       the CAN controller into sleep mode if needed.
  *
  */
-void leos_mcp251xfd_deinit(MCP251XFD *dev);
+void leos_mcp251xfd_deinit(leos_mcp251xfd_t *dev);

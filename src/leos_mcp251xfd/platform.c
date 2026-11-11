@@ -1,4 +1,5 @@
-#include "leos/log.h"
+#include "leos/mcp251xfd/config.h"
+#include "leos/mcp251xfd.h"
 #include "leos/mcp251xfd/config.h"
 #include "MCP251XFD.h"
 #include "hardware/spi.h"
@@ -42,7 +43,7 @@ eERRORRESULT MCP251XFD_InterfaceInit_Pico(void* pIntDev, uint8_t chipSelect, con
 {
     if (pIntDev == NULL)
         return ERR__SPI_PARAMETER_ERROR;
-    leos_mcp251xfd_hw_t* hw = (leos_mcp251xfd_hw_t*)pIntDev;
+    const leos_mcp251xfd_hw_t* hw = &((leos_mcp251xfd_t*)pIntDev)->hw;
 
     // Initialize Pico SPI and pins
     spi_init(hw->spi, sckFreq);
@@ -67,8 +68,7 @@ eERRORRESULT MCP251XFD_InterfaceTransfer_Pico(void* pIntDev, uint8_t chipSelect,
     if (txData == NULL)
         return ERR__SPI_PARAMETER_ERROR;
 
-    // Cast from config ptr
-    leos_mcp251xfd_hw_t* hw = (leos_mcp251xfd_hw_t*)pIntDev;
+    const leos_mcp251xfd_hw_t* hw = &((leos_mcp251xfd_t*)pIntDev)->hw;
 
     // Disable interrupts during transfer process
     uint32_t irqs = save_and_disable_interrupts();

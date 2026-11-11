@@ -3,6 +3,10 @@
 #include "mcp251xfd/config.h"
 #include "MCP251XFD.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /**
  * @brief Caller-owned MCP251XFD device and Pico hardware configuration.
  *
@@ -148,3 +152,7 @@ eERRORRESULT leos_mcp251xfd_receive(leos_mcp251xfd_t *dev, uint32_t *can_id,
  *
  */
 void leos_mcp251xfd_deinit(leos_mcp251xfd_t *dev);
+
+#ifdef __cplusplus
+}
+#endif

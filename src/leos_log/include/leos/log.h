@@ -3,6 +3,10 @@
 #include "ulog.h"
 #include <stdbool.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifdef LEOS_LOG_ENABLED
     #define LOG_TRACE(...) ulog_message(ULOG_TRACE_LEVEL, __VA_ARGS__)
     #define LOG_DEBUG(...) ulog_message(ULOG_DEBUG_LEVEL, __VA_ARGS__)
@@ -45,3 +49,7 @@
  * @return true if initialization succeeds, false if stdio could not be initialized.
  */
 bool leos_log_init_console(ulog_level_t level);
+
+#ifdef __cplusplus
+}
+#endif

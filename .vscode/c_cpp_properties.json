@@ -4,16 +4,17 @@
             "name": "Pico",
             "includePath": [
                 "/usr/share/pico-sdk/**",
-                "${workspaceFolder}/**",
-                "${userHome}/.pico-sdk/sdk/**"
+                "${workspaceFolder}/src/leos_cyphal/include",
+                "${workspaceFolder}/**"
             ],
             "forcedInclude": [
                 "${workspaceFolder}/build/generated/pico_base/pico/config_autogen.h"
             ],
             "defines": [],
             "compileCommands": "${workspaceFolder}/build/compile_commands.json",
+            "configurationProvider": "ms-vscode.cmake-tools",
             "cStandard": "c17",
-            "cppStandard": "c++14",
+            "cppStandard": "c++17",
             "intelliSenseMode": "linux-gcc-arm"
         }
     ],

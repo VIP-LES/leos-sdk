@@ -20,6 +20,7 @@ eERRORRESULT leos_mcp251xfd_init(leos_mcp251xfd_t *device,
     memset(&device->native, 0, sizeof(device->native));
     device->irq_pending = false;
     device->txq_full_logged = false;
+    device->tx_error_logged = false;
     device->error_status_known = false;
     device->last_error_status = 0;
     MCP251XFD *native = &device->native;
@@ -131,6 +132,7 @@ void leos_mcp251xfd_deinit(leos_mcp251xfd_t *dev) {
     gpio_set_irq_enabled(dev->hw.pin_irq, GPIO_IRQ_EDGE_FALL, false);
     dev->irq_pending = false;
     dev->txq_full_logged = false;
+    dev->tx_error_logged = false;
     dev->error_status_known = false;
     dev->native.InterfaceDevice = NULL;
 }
@@ -196,7 +198,9 @@ eERRORRESULT leos_mcp251xfd_send(leos_mcp251xfd_t *dev, uint32_t can_id,
     eMCP251XFD_TXQstatus status;
     eERRORRESULT result = MCP251XFD_GetTXQStatus(&dev->native, &status);
     if (result != ERR_OK) {
-        LOG_ERROR("MCP251XFD: TXQ status read failed: %d", result);
+        if (!dev->tx_error_logged)
+            LOG_ERROR("MCP251XFD: TXQ status read failed: %d", result);
+        dev->tx_error_logged = true;
         return result;
     }
     if (!(status & MCP251XFD_TXQ_NOT_FULL)) {
@@ -225,11 +229,18 @@ eERRORRESULT leos_mcp251xfd_send(leos_mcp251xfd_t *dev, uint32_t can_id,
         .PayloadData = payload,
     };
     result = MCP251XFD_TransmitMessageToTXQ(&dev->native, &message, true);
-    if (result == ERR_OK)
+    if (result == ERR_OK) {
+        if (dev->tx_error_logged) {
+            LOG_INFO("MCP251XFD: TXQ send recovered");
+            dev->tx_error_logged = false;
+        }
         LOG_TRACE("CAN TX queued id=0x%08lx bytes=%u", (unsigned long)can_id,
                   (unsigned)MCP251XFD_DLCToByte(message.DLC, true));
-    else
-        LOG_ERROR("MCP251XFD: TXQ write failed: %d", result);
+    } else {
+        if (!dev->tx_error_logged)
+            LOG_ERROR("MCP251XFD: TXQ write failed: %d", result);
+        dev->tx_error_logged = true;
+    }
     return result;
 }
 
@@ -296,20 +307,21 @@ void leos_mcp251xfd_task(leos_mcp251xfd_t *dev) {
     eERRORRESULT err;
     eMCP251XFD_InterruptFlagCode code;
 
-    // Keep fetching the highest-priority pending event until none remain.
-    while(true)
+    // A stuck level interrupt must not monopolize the application poll loop.
+    for (unsigned serviced = 0; serviced < 32u; serviced++)
     {
         err = MCP251XFD_GetCurrentInterruptEvent(native, &code);
         if (err != ERR_OK)
         {
             LOG_ERROR("GetCurrentInterruptEvent failed: %d", err);
-            break;
+            dev->irq_pending = true;
+            return;
         }
         if (code == MCP251XFD_NO_INTERRUPT)
         {
             LOG_TRACE("No int anymore");
             // All clear
-            break;
+            return;
         }
 
         LOG_TRACE("IRQ event: %d", code);
@@ -342,14 +354,15 @@ void leos_mcp251xfd_task(leos_mcp251xfd_t *dev) {
         }
 
         case MCP251XFD_TXQ_INTERRUPT:
+        case MCP251XFD_TRANSMIT_ATTEMPT:
         {
-            // Clear any TXQ-related FIFO events, then the global TX event.
             eMCP251XFD_TXQstatus qst;
             err = MCP251XFD_GetTXQStatus(native, &qst);
             if (err != ERR_OK)
             {
                 LOG_ERROR("GetTXQStatus failed: %d", err);
-                break;
+                dev->irq_pending = true;
+                return;
             }
             if (qst & MCP251XFD_TXQ_ATTEMPTS_EXHAUSTED) {
                 LOG_WARNING("CAN TXQ attempts exhausted (status=0x%02x); resetting TXQ and dropping queued frames",
@@ -358,7 +371,24 @@ void leos_mcp251xfd_task(leos_mcp251xfd_t *dev) {
                 err = MCP251XFD_ResetTXQ(native);
                 if (err != ERR_OK) LOG_ERROR("MCP251XFD: TXQ reset failed: %d", err);
             }
-            // MCP251XFD_ClearInterruptEvents(dev, MCP251XFD_INT_TX_EVENT);
+            // CiINT.TXIF is derived from TXQ status; clear its source bits.
+            // NOT_FULL and EMPTY are level bits and cannot be cleared here.
+            const uint8_t clearable = (uint8_t)qst &
+                (MCP251XFD_TXQ_ATTEMPTS_EXHAUSTED | MCP251XFD_TXQ_BUS_ERROR |
+                 MCP251XFD_TXQ_ARBITRATION_LOST | MCP251XFD_TXQ_ABORTED);
+            if (clearable != 0u) {
+                err = MCP251XFD_ClearFIFOEvents(native, MCP251XFD_TXQ, clearable);
+                if (err != ERR_OK) {
+                    LOG_ERROR("MCP251XFD: clearing TXQ events failed: %d", err);
+                    dev->irq_pending = true;
+                    return;
+                }
+            } else {
+                // Recheck after the receive path drains FIFO1. A level bit
+                // can keep IRQ low without another falling edge.
+                dev->irq_pending = true;
+                return;
+            }
             break;
         }
 
@@ -380,4 +410,6 @@ void leos_mcp251xfd_task(leos_mcp251xfd_t *dev) {
         }
         }
     }
+    // More causes remain; resume on the next poll without waiting for an edge.
+    dev->irq_pending = true;
 }

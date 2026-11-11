@@ -241,9 +241,22 @@ void Node::poll() noexcept
     if (timestamp >= next_heartbeat_us_)
         publishHeartbeat(timestamp);
 
-    // The TX callback returns false when TXQ is full; the next poll retries.
-    // Polling also applies acceptance filters and expires old TX/RX state.
+    // A false TX callback means "try later" to libcanard, including when
+    // the MCP reports an error. Poll also expires transfers past deadline.
     canard_poll(&canard_, 1U);
+
+    // libcanard can drop old transfers without a failed publish() call.
+    // Report changed totals at most every five seconds on a busy bus.
+    if ((timestamp >= next_tx_loss_log_us_) &&
+        ((canard_.err.tx_expiration != reported_tx_expiration_) ||
+         (canard_.err.tx_sacrifice != reported_tx_sacrifice_))) {
+        reported_tx_expiration_ = canard_.err.tx_expiration;
+        reported_tx_sacrifice_ = canard_.err.tx_sacrifice;
+        next_tx_loss_log_us_ = timestamp + 5000000U;
+        LOG_WARNING("Cyphal TX dropped: expired=%llu sacrificed=%llu",
+                    (unsigned long long)reported_tx_expiration_,
+                    (unsigned long long)reported_tx_sacrifice_);
+    }
 }
 
 /* Canard Driver Functions */

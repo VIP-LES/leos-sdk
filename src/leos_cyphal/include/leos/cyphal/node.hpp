@@ -115,6 +115,9 @@ private:
     std::uint8_t heartbeat_tid_ = 0;
     canard_us_t next_heartbeat_us_ = 0;
     bool heartbeat_enqueue_failed_ = false;
+    std::uint64_t reported_tx_expiration_ = 0;
+    std::uint64_t reported_tx_sacrifice_ = 0;
+    canard_us_t next_tx_loss_log_us_ = 0;
 };
 
 } // namespace leos::cyphal

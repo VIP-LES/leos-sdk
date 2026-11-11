@@ -16,6 +16,7 @@ typedef struct
     leos_mcp251xfd_hw_t hw;              /**< Pico SPI and GPIO configuration. */
     volatile bool irq_pending;           /**< IRQ work to service outside the ISR. */
     bool txq_full_logged;                 /**< Suppress repeated full-queue messages. */
+    bool tx_error_logged;                 /**< Suppress repeated SPI/TXQ send errors until recovery. */
     bool error_status_known;              /**< Whether last_error_status is valid. */
     uint8_t last_error_status;            /**< Last logged CAN error-state flags. */
 } leos_mcp251xfd_t;

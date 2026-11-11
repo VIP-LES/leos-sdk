@@ -31,6 +31,7 @@ add_custom_target(test
         leos_log
         leos_mcp251xfd
         leos_mcp342x
+        leos_mcp41100
         leos_purpleboard
         leos_sx126x
         leos_cyphal

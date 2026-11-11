@@ -91,8 +91,8 @@ bool leos_mcp251xfd_handle_gpio_irq(leos_mcp251xfd_t *device, uint gpio,
  *
  * No SPI work occurs in the ISR. If FIFO1 is pending, this function returns
  * with the IRQ latched so the caller can drain FIFO1, then call this function
- * again to process any other pending events. The Cyphal MCP transport drains
- * FIFO1 through leos_cyphal_rx_process().
+ * again to process any other pending events. The Cyphal node drains FIFO1
+ * through leos::cyphal::Node::poll().
  *
  * @param dev Pointer to the device to service.
  */

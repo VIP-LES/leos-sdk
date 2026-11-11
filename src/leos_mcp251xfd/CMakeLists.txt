@@ -28,10 +28,11 @@ target_link_libraries(leos_mcp251xfd
     leos_log
     pico_time
     pico_stdlib
+    hardware_irq
     hardware_sync
 )
 
 target_compile_definitions(leos_mcp251xfd
-    PUBLIC
+    PRIVATE
     USE_ERRORS_STRING
 )

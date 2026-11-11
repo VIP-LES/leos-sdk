@@ -31,8 +31,8 @@ typedef struct
  *  - Applies bitrate, clock source, filter, and FIFO configuration.
  *  - Configures the IRQ pin as an input.
  *
- * The application owns the Pico GPIO IRQ callback. Its dispatcher calls
- * leos_mcp251xfd_irq_handler() for this device when the IRQ pin signals.
+ * The application owns the Pico GPIO IRQ callback. It can pass each event to
+ * leos_mcp251xfd_handle_gpio_irq() to match this device's IRQ pin.
  *
  * @param[in,out] device
  *     Pointer to caller-owned @ref leos_mcp251xfd_t storage. The function
@@ -62,6 +62,18 @@ eERRORRESULT leos_mcp251xfd_init(leos_mcp251xfd_t *device,
  * @param device MCP251XFD device whose IRQ pin signaled.
  */
 void leos_mcp251xfd_irq_handler(leos_mcp251xfd_t *device);
+
+/**
+ * @brief Match a Pico GPIO callback event to this device and latch its IRQ.
+ *
+ * Call this from the application's shared GPIO callback with its gpio and
+ * event_mask arguments. Only a falling edge on device->hw.pin_irq is accepted.
+ * No SPI work occurs here; call leos_mcp251xfd_task() outside the ISR.
+ *
+ * @return true if the event belonged to this device, false otherwise.
+ */
+bool leos_mcp251xfd_handle_gpio_irq(leos_mcp251xfd_t *device, uint gpio,
+                                   uint32_t event_mask);
 
 /**
  * @brief Process pending MCP251XFD interrupts and service RX/TX events.

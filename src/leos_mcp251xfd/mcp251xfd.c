@@ -261,6 +261,15 @@ void leos_mcp251xfd_irq_handler(leos_mcp251xfd_t *dev) {
     dev->irq_pending = true;
 }
 
+bool leos_mcp251xfd_handle_gpio_irq(leos_mcp251xfd_t *dev, uint gpio,
+                                   uint32_t event_mask) {
+    if ((dev == NULL) || (gpio != dev->hw.pin_irq) ||
+        !(event_mask & GPIO_IRQ_EDGE_FALL))
+        return false;
+    leos_mcp251xfd_irq_handler(dev);
+    return true;
+}
+
 void leos_mcp251xfd_task(leos_mcp251xfd_t *dev) {
     if (!dev)
         return;

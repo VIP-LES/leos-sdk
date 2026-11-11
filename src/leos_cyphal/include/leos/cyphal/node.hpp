@@ -12,7 +12,10 @@
 
 namespace leos::cyphal {
 
-// Initial node shell. Subscriptions and publishing are intentionally still TODO.
+class Publisher;
+class Subscriber;
+
+// Cyphal node. Application publishers and subscribers use the same transport.
 class Node final {
 public:
     enum class Health : std::uint8_t {
@@ -76,6 +79,9 @@ public:
     canard_t& canard() noexcept { return canard_; }
 
 private:
+    friend class Publisher;
+    friend class Subscriber;
+
     static constexpr std::size_t heap_size_ = 32U * 1024U;
     static constexpr std::size_t tx_queue_capacity_ = 32U;
     static constexpr std::size_t max_rx_frames_per_poll_ = 32U;

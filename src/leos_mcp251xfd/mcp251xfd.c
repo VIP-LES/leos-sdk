@@ -208,8 +208,6 @@ eERRORRESULT leos_mcp251xfd_send(leos_mcp251xfd_t *dev, uint32_t can_id,
             LOG_DEBUG("CAN TXQ full; frame 0x%08lx will be retried", (unsigned long)can_id);
             log_can_error_state(dev, false);
             dev->txq_full_logged = true;
-        } else {
-            LOG_TRACE("CAN TXQ still full; frame 0x%08lx pending", (unsigned long)can_id);
         }
         return ERR__BUFFER_FULL;
     }

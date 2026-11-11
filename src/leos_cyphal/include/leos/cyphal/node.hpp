@@ -14,6 +14,7 @@ namespace leos::cyphal {
 
 class Publisher;
 class Subscriber;
+class Service;
 
 // Cyphal node. Application publishers and subscribers use the same transport.
 class Node final {
@@ -81,6 +82,7 @@ public:
 private:
     friend class Publisher;
     friend class Subscriber;
+    friend class Service;
 
     static constexpr std::size_t heap_size_ = 32U * 1024U;
     static constexpr std::size_t tx_queue_capacity_ = 32U;

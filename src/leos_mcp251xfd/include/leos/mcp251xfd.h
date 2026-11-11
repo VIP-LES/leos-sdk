@@ -26,8 +26,10 @@ typedef void (*leos_mcp251xfd_rx_cb)(MCP251XFD *device, void *user_reference);
  * This function:
  *  - Initializes the GPIO and SPI interface for the MCP251XFD.
  *  - Applies bitrate, clock source, filter, and FIFO configuration.
- *  - Optionally installs the global GPIO IRQ callback used to wake the
- *    MCP251XFD service task.
+ *  - Configures the IRQ pin as an input.
+ *
+ * The application owns the Pico GPIO IRQ callback. Its dispatcher calls
+ * leos_mcp251xfd_irq_handler() for this device when the IRQ pin signals.
  *
  * @param[in,out] device
  *     Pointer to a user-allocated @ref MCP251XFD structure. **Must be zeroed**
@@ -40,15 +42,6 @@ typedef void (*leos_mcp251xfd_rx_cb)(MCP251XFD *device, void *user_reference);
  * @param[in] config
  *     Static configuration describing bit timing, filters, FIFOs, and mode.
  *
- * @param[in] attachInterrupt
- *     If `true`, this function installs a shared global IRQ handler for GPIO
- *     interrupts and enables interrupts for @ref hw->pin_irq.
- *
- *     If `false`, the caller is responsible for configuring the GPIO interrupt
- *     system and MUST manually call @ref leos_mcp251xfd_irq_handler() from their
- *     own ISR handler that is setup BEFORE calling @ref leos_mcp251xfd_init()!
- *
-void leos_mcp251xfd_deinit(MCP251XFD *dev);
  * @return eERRORRESULT
  *     - @ref ERR_OK on success.
  *     - A specific error code if initialization fails.
@@ -58,36 +51,25 @@ void leos_mcp251xfd_deinit(MCP251XFD *dev);
  */
 eERRORRESULT leos_mcp251xfd_init(MCP251XFD *device,
                                  const leos_mcp251xfd_hw_t *hw,
-                                 const leos_mcp251xfd_config_t *config,
-                                 bool attachInterrupt);
+                                 const leos_mcp251xfd_config_t *config);
 
 /**
  * @brief Core GPIO interrupt handler entry point.
  *
- * This function is specifically intended to be invoked from the RP2040's
- * `gpio_set_irq_enabled_with_callback()` dispatch. It marks the MCP251XFD
- * context for deferred processing.
+ * Call this from the application's shared GPIO callback after routing the
+ * interrupt pin to this device. It only latches a flag; call
+ * leos_mcp251xfd_task() later in non-interrupt context to perform SPI work.
  *
- * @param gpio   GPIO index on which INT was observed.
- * @param events GPIO event mask.
+ * @param device MCP251XFD device whose IRQ pin signaled.
  */
-void leos_mcp251xfd_irq_handler(uint gpio, uint32_t events);
-
-/**
- * @brief Register the global GPIO interrupt callback used for MCP251XFD devices.
- *
- * This sets up the RP2040 GPIO interrupt infrastructure (e.g., enabling
- * `IO_IRQ_BANK0` and installing a shared IRQ callback). This is usually
- * called automatically when `attachInterrupt == true` in @ref leos_mcp251xfd_init().
- */
-void leos_mcp251xfd_attach_gpio_interrupt(void);
+void leos_mcp251xfd_irq_handler(MCP251XFD *device);
 
 /**
  * @brief Process pending MCP251XFD interrupts and service RX/TX events.
  *
  * This function must be called regularly (e.g., inside the main loop or a
  * cooperative task scheduler). If an interrupt was signaled via
- * @ref leos_mcp251xfd_gpio_isr(), this function handles it by:
+ * @ref leos_mcp251xfd_irq_handler(), this function handles it by:
  *
  *  - Querying and clearing interrupt causes
  *  - Calling the user-provided RX callback to drain FIFO frames
@@ -117,10 +99,9 @@ void leos_mcp251xfd_set_rx_handler(MCP251XFD *dev,
 /**
  * @brief Deinitialize an MCP251XFD device instance and release driver resources.
  *
- * This function reverses the initialization performed by leos_mcp251xfd_init().
- * It disables the interrupt associated with the device's IRQ pin, clears the
- * internal driver context lookup entry, frees the driver's context structure,
- * and detaches the context from the MCP251XFD handle.
+ * This frees the driver's context structure and detaches it from the device.
+ * The application owns GPIO interrupt configuration and must disable its IRQ
+ * routing before deinitializing the device.
  *
  * After calling this function:
  *   - The MCP251XFD *dev handle must NOT be used again unless re-initialized.
@@ -137,7 +118,5 @@ void leos_mcp251xfd_set_rx_handler(MCP251XFD *dev,
  *       The caller is responsible for disabling SPI peripherals or placing
  *       the CAN controller into sleep mode if needed.
  *
- * @note If multiple MCP251XFD instances are used, this function affects only
- *       the instance associated with @p dev and its configured IRQ pin.
  */
 void leos_mcp251xfd_deinit(MCP251XFD *dev);

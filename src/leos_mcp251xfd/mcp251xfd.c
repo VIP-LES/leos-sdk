@@ -1,7 +1,6 @@
 #include "leos/log.h"
 #include "leos/mcp251xfd.h"
 #include "leos/mcp251xfd/config.h"
-#include "hardware/sync.h"
 #include "pico/stdlib.h"
 #include "platform.h"
 #include <string.h>
@@ -16,11 +15,13 @@ typedef struct {
     void* cb_user_reference;
 } leos_mcp251xfd_ctx_t;
 
-// Lookup table for an initialized controller by its interrupt pin
-static leos_mcp251xfd_ctx_t *s_ctx_by_gpio[48] = {0};
-
-eERRORRESULT leos_mcp251xfd_init(MCP251XFD *device, const leos_mcp251xfd_hw_t *hw, const leos_mcp251xfd_config_t *config, bool attachInterrupt)
+eERRORRESULT leos_mcp251xfd_init(MCP251XFD *device,
+                                 const leos_mcp251xfd_hw_t *hw,
+                                 const leos_mcp251xfd_config_t *config)
 {
+    if ((device == NULL) || (hw == NULL) || (config == NULL))
+        return ERR__PARAMETER_ERROR;
+
     memset(device, 0, sizeof(MCP251XFD));
     LOG_INFO("Initializing MCP251XFD");
     LOG_TRACE("SPI Block: %d", hw->spi);
@@ -44,20 +45,6 @@ eERRORRESULT leos_mcp251xfd_init(MCP251XFD *device, const leos_mcp251xfd_hw_t *h
     gpio_init(hw->pin_irq);
     gpio_set_dir(hw->pin_irq, GPIO_IN);
     gpio_pull_up(hw->pin_irq);
-    if (attachInterrupt) {
-        leos_mcp251xfd_attach_gpio_interrupt();
-    }
-    irq_set_enabled(IO_IRQ_BANK0, true);
-    gpio_set_irq_enabled(hw->pin_irq, GPIO_IRQ_EDGE_FALL, true);
-
-    // Store the config in a array map to the irq gpio
-    if (hw->pin_irq >= count_of(s_ctx_by_gpio)) {
-        LOG_ERROR("MCP251XFD IRQ pin out of range for RP2350 Limits (48)");
-        return ERR__OUT_OF_RANGE;
-    }
-    s_ctx_by_gpio[hw->pin_irq] = ctx;
-
-
     // Fill device with HAL configuration
     device->SPI_ChipSelect = hw->pin_cs;
     device->SPIClockSpeed = hw->spi_baud;
@@ -142,29 +129,16 @@ void leos_mcp251xfd_deinit(MCP251XFD *dev) {
     leos_mcp251xfd_ctx_t *ctx = (leos_mcp251xfd_ctx_t*) dev->UserDriverData;
     if (!ctx) return;
 
-    gpio_set_irq_enabled(ctx->hw->pin_irq, GPIO_IRQ_EDGE_FALL, false);
-    s_ctx_by_gpio[ctx->hw->pin_irq] = NULL;
-
     free(ctx);
     dev->UserDriverData = NULL;
 }
 
 
-void leos_mcp251xfd_irq_handler(uint gpio, uint32_t events) {
-    if (!(events & GPIO_IRQ_EDGE_FALL)) return;
-
-    if (gpio >= count_of(s_ctx_by_gpio)) return;
-    leos_mcp251xfd_ctx_t* ctx = s_ctx_by_gpio[gpio];
+void leos_mcp251xfd_irq_handler(MCP251XFD *dev) {
+    if (dev == NULL) return;
+    leos_mcp251xfd_ctx_t* ctx = (leos_mcp251xfd_ctx_t*) dev->UserDriverData;
     if (!ctx) return;
     ctx->irq_pending = true;
-}
-
-static void gpio_cb(uint gpio, uint32_t events) {
-    leos_mcp251xfd_irq_handler(gpio, events);
-}
-void leos_mcp251xfd_attach_gpio_interrupt() {
-    LOG_DEBUG("Binding this core's GPIO irq handler to the MCP251XFD driver");
-    gpio_set_irq_callback(gpio_cb);
 }
 
 void leos_mcp251xfd_set_rx_handler(MCP251XFD *dev, leos_mcp251xfd_rx_cb callback, void *user_reference) {

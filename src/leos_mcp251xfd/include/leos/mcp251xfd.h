@@ -81,6 +81,33 @@ void leos_mcp251xfd_irq_handler(leos_mcp251xfd_t *device);
 void leos_mcp251xfd_task(leos_mcp251xfd_t *dev);
 
 /**
+ * @brief Queue one extended-ID CAN FD frame for transmission.
+ *
+ * Payload lengths between CAN FD DLC sizes are zero-padded to the next valid
+ * wire length. For example, 9 bytes are sent as a 12-byte frame.
+ *
+ * @return ERR_OK if queued, ERR__BUFFER_FULL if TXQ cannot accept a frame,
+ *         or another vendor error. The caller may retry a full queue later.
+ */
+eERRORRESULT leos_mcp251xfd_send(leos_mcp251xfd_t *dev, uint32_t can_id,
+                                 const uint8_t *data, size_t size);
+
+/**
+ * @brief Read one frame from FIFO1 without blocking.
+ *
+ * @p data must have room for 64 bytes; @p capacity is checked before reading.
+ * @p size receives the wire payload length derived from the frame's DLC.
+ * @p timestamp_us may be NULL. The controller is configured for microsecond
+ * timestamp ticks during initialization.
+ *
+ * @return ERR_OK for a frame, ERR__NO_DATA_AVAILABLE if FIFO1 is empty,
+ *         or another vendor error.
+ */
+eERRORRESULT leos_mcp251xfd_receive(leos_mcp251xfd_t *dev, uint32_t *can_id,
+                                    uint8_t *data, size_t capacity,
+                                    size_t *size, uint32_t *timestamp_us);
+
+/**
  * @brief Deinitialize an MCP251XFD device instance.
  *
  * This clears the driver's interrupt state. The

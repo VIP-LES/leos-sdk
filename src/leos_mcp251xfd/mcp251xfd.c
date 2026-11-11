@@ -118,6 +118,67 @@ void leos_mcp251xfd_deinit(leos_mcp251xfd_t *dev) {
     dev->native.InterfaceDevice = NULL;
 }
 
+static uint8_t payload_length_to_dlc(size_t size)
+{
+    if (size <= 8) return (uint8_t)size;
+    if (size <= 12) return 9;
+    if (size <= 16) return 10;
+    if (size <= 20) return 11;
+    if (size <= 24) return 12;
+    if (size <= 32) return 13;
+    if (size <= 48) return 14;
+    return 15;
+}
+
+eERRORRESULT leos_mcp251xfd_send(leos_mcp251xfd_t *dev, uint32_t can_id,
+                                 const uint8_t *data, size_t size)
+{
+    if ((dev == NULL) || (dev->native.InterfaceDevice != dev) ||
+        (can_id > 0x1FFFFFFFu) || (size > 64u) || ((size > 0u) && (data == NULL)))
+        return ERR__PARAMETER_ERROR;
+
+    eMCP251XFD_TXQstatus status;
+    eERRORRESULT result = MCP251XFD_GetTXQStatus(&dev->native, &status);
+    if (result != ERR_OK) return result;
+    if (!(status & MCP251XFD_TXQ_NOT_FULL)) return ERR__BUFFER_FULL;
+
+    uint8_t payload[64] = {0};
+    if (size > 0u) memcpy(payload, data, size);
+    MCP251XFD_CANMessage message = {
+        .MessageID = can_id,
+        .DLC = (eMCP251XFD_DataLength)payload_length_to_dlc(size),
+        .ControlFlags = MCP251XFD_CANFD_FRAME | MCP251XFD_EXTENDED_MESSAGE_ID,
+        .PayloadData = payload,
+    };
+    return MCP251XFD_TransmitMessageToTXQ(&dev->native, &message, true);
+}
+
+eERRORRESULT leos_mcp251xfd_receive(leos_mcp251xfd_t *dev, uint32_t *can_id,
+                                    uint8_t *data, size_t capacity,
+                                    size_t *size, uint32_t *timestamp_us)
+{
+    if ((dev == NULL) || (dev->native.InterfaceDevice != dev) ||
+        (can_id == NULL) || (data == NULL) || (capacity < 64u) || (size == NULL))
+        return ERR__PARAMETER_ERROR;
+
+    eMCP251XFD_FIFOstatus status;
+    eERRORRESULT result = MCP251XFD_GetFIFOStatus(&dev->native, MCP251XFD_FIFO1, &status);
+    if (result != ERR_OK) return result;
+    if (!(status & MCP251XFD_RX_FIFO_NOT_EMPTY)) return ERR__NO_DATA_AVAILABLE;
+
+    MCP251XFD_CANMessage message = {.PayloadData = data};
+    uint32_t timestamp = 0;
+    result = MCP251XFD_ReceiveMessageFromFIFO(&dev->native, &message,
+                                               MCP251XFD_PAYLOAD_64BYTE,
+                                               &timestamp, MCP251XFD_FIFO1);
+    if (result != ERR_OK) return result;
+    *can_id = message.MessageID;
+    *size = MCP251XFD_DLCToByte(message.DLC,
+                                (message.ControlFlags & MCP251XFD_CANFD_FRAME) != 0);
+    if (timestamp_us != NULL) *timestamp_us = timestamp;
+    return ERR_OK;
+}
+
 
 void leos_mcp251xfd_irq_handler(leos_mcp251xfd_t *dev) {
     if (dev == NULL) return;

@@ -29,9 +29,11 @@ typedef struct
  * This function:
  *  - Initializes the GPIO and SPI interface for the MCP251XFD.
  *  - Applies bitrate, clock source, filter, and FIFO configuration.
- *  - Configures the IRQ pin as an input.
+ *  - Configures the IRQ pin as an input and enables its falling-edge interrupt.
  *
- * The application owns the Pico GPIO IRQ callback. It can pass each event to
+ * Register a Pico GPIO IRQ handler on the calling core before initialization.
+ * The driver enables IO_IRQ_BANK0 and the device pin after the MCP is ready.
+ * The application can forward callback events to
  * leos_mcp251xfd_handle_gpio_irq() to match this device's IRQ pin.
  *
  * @param[in,out] device
@@ -44,6 +46,7 @@ typedef struct
  *
  * @return eERRORRESULT
  *     - @ref ERR_OK on success.
+ *     - @ref ERR__CONFIGURATION if no GPIO IRQ handler is registered.
  *     - A specific error code if initialization fails.
  *
  * @note The SPI clock must not exceed 80% of SYSCLK. For SYSCLK = 40 MHz,
@@ -125,9 +128,8 @@ eERRORRESULT leos_mcp251xfd_receive(leos_mcp251xfd_t *dev, uint32_t *can_id,
 /**
  * @brief Deinitialize an MCP251XFD device instance.
  *
- * This clears the driver's interrupt state. The
- * application owns GPIO interrupt configuration and must disable its IRQ
- * routing before deinitializing the device.
+ * This disables the device pin's falling-edge interrupt and clears the
+ * driver's interrupt state. The application still owns its GPIO callback.
  *
  * After calling this function:
  *   - The embedded vendor handle must not be used again unless re-initialized.

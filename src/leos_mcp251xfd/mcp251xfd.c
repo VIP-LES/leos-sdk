@@ -1,6 +1,7 @@
 #include "leos/log.h"
 #include "leos/mcp251xfd.h"
 #include "leos/mcp251xfd/config.h"
+#include "hardware/irq.h"
 #include "pico/stdlib.h"
 #include "platform.h"
 #include <string.h>
@@ -11,6 +12,9 @@ eERRORRESULT leos_mcp251xfd_init(leos_mcp251xfd_t *device,
 {
     if ((device == NULL) || (config == NULL))
         return ERR__PARAMETER_ERROR;
+    // Pico requires an IRQ handler before a GPIO interrupt may be enabled.
+    if (!irq_has_handler(IO_IRQ_BANK0))
+        return ERR__CONFIGURATION;
 
     const leos_mcp251xfd_hw_t *hw = &device->hw;
     memset(&device->native, 0, sizeof(device->native));
@@ -110,13 +114,21 @@ eERRORRESULT leos_mcp251xfd_init(leos_mcp251xfd_t *device,
 
     // Start chip in CAN-FD mode. Configuration is closed.
     result = MCP251XFD_RequestOperationMode(native, config->initial_mode, true);
-    if (result != ERR_OK)
+    if (result != ERR_OK) {
         leos_mcp251xfd_deinit(device);
+        return result;
+    }
+
+    irq_set_enabled(IO_IRQ_BANK0, true);
+    gpio_set_irq_enabled(hw->pin_irq, GPIO_IRQ_EDGE_FALL, true);
+    if (!gpio_get(hw->pin_irq))
+        leos_mcp251xfd_irq_handler(device);
     return result;
 }
 
 void leos_mcp251xfd_deinit(leos_mcp251xfd_t *dev) {
     if (!dev) return;
+    gpio_set_irq_enabled(dev->hw.pin_irq, GPIO_IRQ_EDGE_FALL, false);
     dev->irq_pending = false;
     dev->txq_full_logged = false;
     dev->error_status_known = false;

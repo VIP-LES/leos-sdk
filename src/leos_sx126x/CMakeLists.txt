@@ -3,6 +3,8 @@
 
 cmake_minimum_required(VERSION 3.15)
 
+include(sx1262)
+
 if (NOT(CMAKE_SYSTEM_NAME STREQUAL "Linux"))
     set(LEOS_SX126X_PORT_SRC sx126x_port_pico.c)
 else()

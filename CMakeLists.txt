@@ -17,27 +17,12 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     # Pull in Pico SDK
     include(pico_sdk_import)
 
-    project(leos-sdk C CXX ASM)
+    project(leos-sdk LANGUAGES C CXX ASM)
 
     pico_sdk_init()
 
 endif()
 
-# External dependencies
-include(libcanard)
-include(o1heap)
-include(nunavut)
-include(Pico_BusIO)
-include(Adafruit_LTR390)
-include(Adafruit_BME680)
-include(Adafruit_PM25AQI)
-include(Adafruit_TSL2591)
-include(sx1262)
-include(ulog)
-# Note: MCP251XFD is not included here
-# since it needs special config before being included
-
-# Include all our sdk modules
 add_subdirectory(src)
 
 # Test target that compiles all excluded-from-all libraries
@@ -45,21 +30,9 @@ add_custom_target(test
     DEPENDS
         leos_log
         leos_mcp251xfd
+        leos_mcp342x
         leos_purpleboard
         leos_cyphal_node
         leos_cyphal_transport
         leos_cyphal_transport_mcp251xfd
 )
-
-
-# cyphal_generate_types(
-#     TARGET TEMPLATE_PICO
-#     DSDL_DIR ${PROJECT_SOURCE_DIR}/external/public_regulated_data_types/uavcan
-# )
-
-# # Generate reg types — reg depends on uavcan, so pass uavcan as lookup
-# cyphal_generate_types(
-#     TARGET TEMPLATE_PICO
-#     DSDL_DIR ${PROJECT_SOURCE_DIR}/external/public_regulated_data_types/reg
-#     DSDL_LOOKUP_DIRS ${PROJECT_SOURCE_DIR}/external/public_regulated_data_types/uavcan
-# )

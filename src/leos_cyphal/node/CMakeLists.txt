@@ -3,6 +3,9 @@
 
 cmake_minimum_required(VERSION 3.15)
 
+include(o1heap)
+include(nunavut)
+
 add_library(leos_cyphal_node EXCLUDE_FROM_ALL cyphal.c memory.c)
 
 cyphal_generate_types(

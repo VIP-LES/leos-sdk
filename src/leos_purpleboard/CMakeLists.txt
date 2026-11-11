@@ -1,5 +1,10 @@
 cmake_minimum_required(VERSION 3.15)
 
+include(Pico_BusIO)
+include(Adafruit_LTR390)
+include(Adafruit_BME680)
+include(Adafruit_PM25AQI)
+include(Adafruit_TSL2591)
 
 add_library(leos_purpleboard EXCLUDE_FROM_ALL purpleboard.cpp)
 

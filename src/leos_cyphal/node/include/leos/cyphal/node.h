@@ -66,8 +66,10 @@ leos_cyphal_result_t leos_cyphal_init(leos_cyphal_node_t *node, leos_cyphal_tran
  * This function is non-blocking and executes quickly.
  *
  * @param node Pointer to the initialized Cyphal node instance.
+ * 
+ * @return The remaining TX queue length
  */
-void leos_cyphal_task(leos_cyphal_node_t *node);
+int leos_cyphal_task(leos_cyphal_node_t *node);
 
 /**
  * @brief Queue a Cyphal transfer for transmission.

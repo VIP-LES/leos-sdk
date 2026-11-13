@@ -39,7 +39,7 @@ void leos_cyphal_rx_process(leos_cyphal_node_t *node) {
         node->transport.rx_process(node->transport.user_reference, &node->can);
 }
 
-void leos_cyphal_task(leos_cyphal_node_t *node) {
+int leos_cyphal_task(leos_cyphal_node_t *node) {
     int poll = canardTxPoll(&node->txq, &node->can, to_us_since_boot(get_absolute_time()), node, tx_callback, NULL, NULL);
     if (poll < 0)
         LOG_ERROR("canardTxPoll failed with error: %d", poll);
@@ -48,6 +48,8 @@ void leos_cyphal_task(leos_cyphal_node_t *node) {
         leos_cyphal_result_t result = leos_cyphal_publish_heartbeat(node);
         node->next_heartbeat = make_timeout_time_ms(HEARTBEAT_INTERVAL_MS);
     }
+
+    return poll;
 }
 
 leos_cyphal_result_t leos_cyphal_publish_heartbeat(leos_cyphal_node_t *node) {

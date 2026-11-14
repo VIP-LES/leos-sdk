@@ -10,6 +10,8 @@
 // The MCP251XFD family provides 32 hardware acceptance filters.
 #define LEOS_CYPHAL_MCP_FILTER_COUNT 32U
 
+#define LEOS_POWER_NODE_ID 0x16
+
 namespace leos::cyphal {
 
 class Publisher;

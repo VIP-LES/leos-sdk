@@ -62,7 +62,7 @@ eERRORRESULT leos_mcp251xfd_init(leos_mcp251xfd_t *device,
     mcp_config.SysclkConfig = config->sysclk_config;
     mcp_config.NominalBitrate = config->nominal_bitrate;
     mcp_config.DataBitrate = config->data_bitrate;
-    mcp_config.Bandwidth = config->data_bitrate;
+    mcp_config.Bandwidth = config->bandwidth;
     mcp_config.ControlFlags = config->ctrl_flags;
     mcp_config.SysInterruptFlags = config->irq_flags;
 
@@ -93,6 +93,7 @@ eERRORRESULT leos_mcp251xfd_init(leos_mcp251xfd_t *device,
         false // We aren't using timestamp super heavily, so no need to interrupt on timer rollover
     );
     if (timestamp_result != ERR_OK) {
+        LOG_ERROR("MCP251XFD timestamp configuration failed: %d", timestamp_result);
         leos_mcp251xfd_deinit(device);
         return timestamp_result;
     }
@@ -116,6 +117,14 @@ eERRORRESULT leos_mcp251xfd_init(leos_mcp251xfd_t *device,
     // Start chip in CAN-FD mode. Configuration is closed.
     result = MCP251XFD_RequestOperationMode(native, config->initial_mode, true);
     if (result != ERR_OK) {
+        eMCP251XFD_OperationMode actual_mode;
+        const eERRORRESULT mode_result = MCP251XFD_GetActualOperationMode(native, &actual_mode);
+        if (mode_result == ERR_OK)
+            LOG_ERROR("MCP251XFD mode change to %d failed: %d (actual mode %d)",
+                      config->initial_mode, result, actual_mode);
+        else
+            LOG_ERROR("MCP251XFD mode change to %d failed: %d (mode read failed: %d)",
+                      config->initial_mode, result, mode_result);
         leos_mcp251xfd_deinit(device);
         return result;
     }
@@ -223,7 +232,8 @@ eERRORRESULT leos_mcp251xfd_send(leos_mcp251xfd_t *dev, uint32_t can_id,
     MCP251XFD_CANMessage message = {
         .MessageID = can_id,
         .DLC = (eMCP251XFD_DataLength)payload_length_to_dlc(size),
-        .ControlFlags = MCP251XFD_CANFD_FRAME | MCP251XFD_EXTENDED_MESSAGE_ID,
+        .ControlFlags = MCP251XFD_CANFD_FRAME | MCP251XFD_SWITCH_BITRATE |
+                        MCP251XFD_EXTENDED_MESSAGE_ID,
         .PayloadData = payload,
     };
     result = MCP251XFD_TransmitMessageToTXQ(&dev->native, &message, true);
